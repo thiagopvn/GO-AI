@@ -116,7 +116,7 @@ export function Sidebar() {
             <div className="flex justify-center">
               <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center">
                 <span className="text-sm font-medium">
-                  {userData.nome.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  {userData.nome.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                 </span>
               </div>
             </div>

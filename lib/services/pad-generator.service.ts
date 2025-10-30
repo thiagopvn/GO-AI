@@ -12,7 +12,7 @@ import {
 } from 'docx';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Transgressao, PAD, Militar } from '@/types';
+import { Transgressao, PAD, Militar, Sindicancia } from '@/types';
 import { ConfiguracaoService } from './configuracao.service';
 
 export class PADGeneratorService {
@@ -33,7 +33,7 @@ export class PADGeneratorService {
           new Paragraph({
             children: [
               new TextRun({
-                text: nomeUnidade.toUpperCase(),
+                text: String(nomeUnidade).toUpperCase(),
                 bold: true,
                 size: 28
               }),
@@ -353,7 +353,7 @@ export class PADGeneratorService {
           new Paragraph({
             children: [
               new TextRun({
-                text: comandante,
+                text: String(comandante || ''),
                 size: 22
               }),
             ],
@@ -821,7 +821,7 @@ export class PADGeneratorServiceNovo {
             horizontalAnchor: 'text',
             verticalAnchor: 'text',
             relativeHorizontalPosition: 'right',
-            relativeVerticalPosition: 'paragraph',
+            relativeVerticalPosition: 'bottom',
           },
         }),
       ],

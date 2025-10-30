@@ -212,3 +212,31 @@ export enum StatusProcesso {
   ARQUIVADO = 'Arquivado',
   CANCELADO = 'Cancelado'
 }
+
+// Interface para Usuário
+export interface Usuario {
+  id: string;
+  email: string;
+  nome: string;
+  patente: string;
+  matricula?: string;
+  unidade: string;
+  subunidade?: string;
+  telefone?: string;
+  ativo: boolean;
+  perfil?: 'admin' | 'usuario' | 'consulta';
+  createdAt?: Date;
+  updatedAt?: Date;
+  lastLogin?: Date;
+}
+
+// Interface para Dashboard Stats
+export interface DashboardStats {
+  padsFinalizados: number;
+  padsEmAndamento: number;
+  sindicanciasFinalizadas: number;
+  sindicanciasEmAndamento: number;
+  ipmsRegistrados: number;
+  totalMilitares: number;
+  totalReincidentes: number;
+}

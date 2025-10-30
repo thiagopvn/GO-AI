@@ -42,6 +42,8 @@ export default function FormularioPunicao({
     comportamentoAtual: string;
     pontosAntes: number;
     pontosDepois: number;
+    classificacaoAposSimulacao?: string;
+    mudaria?: boolean;
   } | null>(null);
 
   const [formData, setFormData] = useState({

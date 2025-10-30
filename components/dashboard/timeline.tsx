@@ -68,7 +68,7 @@ export function Timeline() {
     }
   };
 
-  const item = {
+  const itemVariant = {
     hidden: { opacity: 0, x: -20 },
     show: { opacity: 1, x: 0 }
   };
@@ -103,7 +103,7 @@ export function Timeline() {
               {items.map((item) => (
                 <motion.div
                   key={item.id}
-                  variants={item}
+                  variants={itemVariant}
                   className="border-l-4 border-slate-200 pl-4 pb-4 last:pb-0"
                 >
                   <div className="flex items-start justify-between">
