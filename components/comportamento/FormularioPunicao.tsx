@@ -42,6 +42,7 @@ export default function FormularioPunicao({
     comportamentoAtual: string;
     pontosAntes: number;
     pontosDepois: number;
+    classificacaoAtual?: string;
     classificacaoAposSimulacao?: string;
     mudaria?: boolean;
   } | null>(null);
@@ -57,12 +58,21 @@ export default function FormularioPunicao({
 
   const handleSimular = async () => {
     try {
-      const resultado = await comportamentoService.simularPunicao(
+      const resultado: any = await comportamentoService.simularPunicao(
         militarId,
         formData.tipo,
         formData.dias
       );
-      setSimulacao(resultado);
+      // Converter o resultado para o formato esperado
+      setSimulacao({
+        comportamentoAnterior: resultado.comportamentoAnterior || '',
+        comportamentoAtual: resultado.comportamentoAtual || '',
+        pontosAntes: resultado.pontosAntes || 0,
+        pontosDepois: resultado.pontosDepois || 0,
+        classificacaoAtual: resultado.classificacaoAtual || resultado.comportamentoAtual || '',
+        classificacaoAposSimulacao: resultado.classificacaoAposSimulacao || '',
+        mudaria: resultado.mudaria || false
+      });
     } catch (error) {
       toast.error('Erro ao simular punição');
     }
