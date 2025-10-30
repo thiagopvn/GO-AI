@@ -744,7 +744,7 @@ export default function ProcessosPage() {
                           Baixar Despacho
                         </Button>
 
-                        {(processo.decisao.includes('Punição') || processo.tipoPunicao) && processo.tipoPunicao && (processo.tipoPunicao === 'detencao' || processo.tipoPunicao === 'prisao') && (
+                        {(processo.decisao.includes('Punição') || processo.tipoPunicao) && processo.tipoPunicao && (processo.tipoPunicao === TipoPunicao.DETENCAO || processo.tipoPunicao === TipoPunicao.PRISAO) && (
                           <Button
                             variant="ghost"
                             size="sm"
