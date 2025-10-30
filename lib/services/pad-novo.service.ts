@@ -384,7 +384,7 @@ export class PADNovoService {
               horizontalAnchor: 'text',
               verticalAnchor: 'text',
               relativeHorizontalPosition: 'right',
-              relativeVerticalPosition: 'paragraph',
+              relativeVerticalPosition: 'bottom',
             },
           }),
         ],
