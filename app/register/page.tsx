@@ -51,7 +51,8 @@ export default function RegisterPage() {
         nome: formData.nome,
         patente: formData.patente as Patente,
         unidade: formData.unidade,
-        isAdmin: false
+        perfil: 'usuario',
+        ativo: true
       });
       router.push('/');
     } catch (error) {
