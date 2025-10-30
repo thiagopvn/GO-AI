@@ -586,7 +586,7 @@ export default function ComportamentoPage() {
             <div className="text-center py-12 text-muted-foreground">
               <UserCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>Selecione um militar para ver seu comportamento</p>
-              <p className="text-sm mt-1">Use a aba "Consultar" para buscar militares</p>
+              <p className="text-sm mt-1">Use a aba &quot;Consultar&quot; para buscar militares</p>
             </div>
           )}
         </TabsContent>

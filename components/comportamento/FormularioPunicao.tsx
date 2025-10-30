@@ -37,7 +37,12 @@ export default function FormularioPunicao({
   onCancel,
 }: FormularioPunicaoProps) {
   const [loading, setLoading] = useState(false);
-  const [simulacao, setSimulacao] = useState<any>(null);
+  const [simulacao, setSimulacao] = useState<{
+    comportamentoAnterior: string;
+    comportamentoAtual: string;
+    pontosAntes: number;
+    pontosDepois: number;
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     tipo: TipoPunicao.REPREENSAO,

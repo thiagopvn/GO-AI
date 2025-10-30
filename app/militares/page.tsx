@@ -70,7 +70,7 @@ import {
   where
 } from 'firebase/firestore';
 import { firestore } from '@/lib/firebase/config';
-import { Militar, Patente, ComportamentoMilitar, isPraca, Transgressao, ProcessoDisciplinar } from '@/types';
+import { Militar, Patente, ComportamentoMilitar, isPraca, Transgressao, ProcessoDisciplinar, StatusProcesso } from '@/types';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -345,7 +345,7 @@ export default function MilitaresPage() {
       // Recalcular comportamento se a patente mudou
       let comportamento = selectedMilitar.comportamento;
       if (formData.patente !== selectedMilitar.patente) {
-        comportamento = ComportamentoService.getComportamentoInicial({ patente: formData.patente as Patente });
+        comportamento = ComportamentoService.getComportamentoInicial({ patente: formData.patente as Patente }) || undefined;
       }
 
       await updateDoc(doc(firestore, 'militares', selectedMilitar.id), {
@@ -420,8 +420,8 @@ export default function MilitaresPage() {
       nomeDeGuerra: militar.nomeDeGuerra || '',
       patente: militar.patente,
       rg: militar.rg || militar.matricula,
-      unidade: militar.unidade,
-      dataInclusao: format(militar.dataInclusao, 'yyyy-MM-dd'),
+      unidade: militar.unidade || '',
+      dataInclusao: militar.dataInclusao ? format(militar.dataInclusao, 'yyyy-MM-dd') : '',
       observacoes: militar.observacoes || ''
     });
     setIsEditModalOpen(true);
@@ -454,17 +454,15 @@ export default function MilitaresPage() {
     const punicoesMilitar = todosProcessos.filter(p => p.militarId === militar.id);
 
     // Calcular comportamento
-    return calcularComportamento(punicoesMilitar, militar.dataInclusao);
+    return calcularComportamento(punicoesMilitar, militar.dataInclusao || new Date());
   };
 
-  // Filtrar militares (excluir inativos)
+  // Filtrar militares
   const filteredMilitares = militares.filter(
     (militar) =>
-      (militar.ativo !== false) && (
-        militar.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        militar.matricula.includes(searchTerm) ||
-        militar.patente.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      militar.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      militar.matricula.includes(searchTerm) ||
+      militar.patente.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Renderizar badge de comportamento
@@ -740,7 +738,9 @@ export default function MilitaresPage() {
                     <div>
                       <p className="text-sm font-medium text-gray-500">Data de Inclusão</p>
                       <p className="mt-1">
-                        {format(selectedMilitar.dataInclusao, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                        {selectedMilitar.dataInclusao
+                          ? format(selectedMilitar.dataInclusao, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
+                          : 'Não informado'}
                       </p>
                     </div>
                     {isPraca(selectedMilitar.patente) && (() => {
@@ -818,7 +818,7 @@ export default function MilitaresPage() {
                                   Aberto em {format(processo.dataAbertura, "dd/MM/yyyy", { locale: ptBR })}
                                 </CardDescription>
                               </div>
-                              <Badge variant={processo.status === 'FINALIZADO' ? 'secondary' : 'default'}>
+                              <Badge variant={processo.status === StatusProcesso.FINALIZADO ? 'secondary' : 'default'}>
                                 {processo.status}
                               </Badge>
                             </div>

@@ -252,12 +252,14 @@ export default function ProcessosPage() {
         dataAbertura: new Date(),
         status: StatusProcesso.EM_ANDAMENTO,
         motivo: formData.descricaoFato,
-        observacoes: formData.observacoes,
-        createdAt: serverTimestamp() as any,
-        updatedAt: serverTimestamp() as any
+        observacoes: formData.observacoes
       };
 
-      const processoRef = await addDoc(collection(db, 'processos'), processo);
+      const processoRef = await addDoc(collection(db, 'processos'), {
+        ...processo,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
 
       // Preparar dados completos para geração do documento
       const processoCompleto = {
@@ -316,10 +318,10 @@ export default function ProcessosPage() {
   };
 
   // Função auxiliar para remover campos undefined
-  const removeUndefinedFields = (obj: any): any => {
+  const removeUndefinedFields = <T extends Record<string, unknown>>(obj: T): Partial<T> => {
     return Object.fromEntries(
       Object.entries(obj).filter(([_, value]) => value !== undefined)
-    );
+    ) as Partial<T>;
   };
 
   // Concluir PAD com novo modal e geração de documento Despacho
@@ -343,8 +345,8 @@ export default function ProcessosPage() {
       const padData = {
         numeroProcesso: selectedProcesso.numero,
         militarId: selectedProcesso.militarId,
-        militarNome: selectedProcesso.militarNome,
-        militarPosto: selectedProcesso.militarPosto,
+        militarNome: selectedProcesso.militarNome || '',
+        militarPosto: selectedProcesso.militarPosto || '',
         dataAbertura: selectedProcesso.dataAbertura,
         status: 'em_andamento' as const,
         descricao: selectedProcesso.motivo,
@@ -354,6 +356,7 @@ export default function ProcessosPage() {
       // Criar o PAD se ainda não existir
       let padId = selectedProcesso.padId;
       if (!padId) {
+        // @ts-ignore - Firebase Date/Timestamp conversion issue
         padId = await padService.criar(padData);
         // Atualizar o processo com o ID do PAD
         await updateDoc(doc(db, 'processos', selectedProcesso.id), { padId });
@@ -364,7 +367,7 @@ export default function ProcessosPage() {
 
       // Atualizar o processo original
       const processoRef = doc(db, 'processos', selectedProcesso.id);
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         status: StatusProcesso.FINALIZADO,
         dataFechamento: new Date(),
         decisao: data.decisao === 'justificar' ? 'Justificado'

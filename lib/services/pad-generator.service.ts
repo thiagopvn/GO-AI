@@ -444,7 +444,7 @@ export class PADGeneratorService {
     return buffer;
   }
 
-  static async gerarRelatorioSindicancia(sindicancia: any): Promise<Blob> {
+  static async gerarRelatorioSindicancia(sindicancia: Sindicancia): Promise<Blob> {
     // TODO: Implementar geração de relatório de sindicância
     throw new Error('Não implementado ainda');
   }

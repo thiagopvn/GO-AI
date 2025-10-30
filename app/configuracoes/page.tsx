@@ -86,10 +86,10 @@ export default function ConfiguracoesPage() {
       setConfiguracoes(configsList);
 
       // Preencher formulário com valores atuais
-      const novoFormData: any = { ...formData };
+      const novoFormData = { ...formData };
       for (const config of configsList) {
         if (config.chave in novoFormData) {
-          novoFormData[config.chave] = config.valor;
+          (novoFormData as Record<string, string | number | boolean>)[config.chave] = config.valor;
         }
       }
       setFormData(novoFormData);

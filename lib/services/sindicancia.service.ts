@@ -87,7 +87,7 @@ export class SindicanciaService {
   // Atualizar sindicância
   static async atualizar(id: string, sindicancia: Partial<Sindicancia>): Promise<void> {
     try {
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         ...sindicancia,
         updatedAt: serverTimestamp()
       };

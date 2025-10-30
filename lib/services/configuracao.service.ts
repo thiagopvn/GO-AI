@@ -183,7 +183,7 @@ export class ConfiguracaoService {
   }
 
   // Obter configuração por chave
-  static async obter(chave: string): Promise<any> {
+  static async obter(chave: string): Promise<string | number | boolean | null> {
     try {
       const docRef = doc(db, COLLECTION_NAME, chave);
       const docSnap = await getDoc(docRef);
@@ -238,7 +238,7 @@ export class ConfiguracaoService {
   }
 
   // Atualizar configuração
-  static async atualizar(chave: string, valor: any, updatedBy: string): Promise<void> {
+  static async atualizar(chave: string, valor: string | number | boolean, updatedBy: string): Promise<void> {
     try {
       const docRef = doc(db, COLLECTION_NAME, chave);
       await setDoc(docRef, {
@@ -254,7 +254,7 @@ export class ConfiguracaoService {
 
   // Atualizar múltiplas configurações
   static async atualizarMultiplas(
-    configuracoes: { chave: string; valor: any }[],
+    configuracoes: { chave: string; valor: string | number | boolean }[],
     updatedBy: string
   ): Promise<void> {
     try {
@@ -293,10 +293,10 @@ export class ConfiguracaoService {
   }
 
   // Exportar configurações
-  static async exportar(): Promise<Record<string, any>> {
+  static async exportar(): Promise<Record<string, unknown>> {
     try {
       const configs = await this.listar();
-      const exportData: Record<string, any> = {};
+      const exportData: Record<string, unknown> = {};
 
       for (const config of configs) {
         exportData[config.chave] = {
@@ -315,7 +315,7 @@ export class ConfiguracaoService {
   }
 
   // Importar configurações
-  static async importar(data: Record<string, any>, updatedBy: string): Promise<void> {
+  static async importar(data: Record<string, { valor: string | number | boolean }>, updatedBy: string): Promise<void> {
     try {
       for (const [chave, config] of Object.entries(data)) {
         if (CONFIGURACOES_PADRAO.find(c => c.chave === chave)) {

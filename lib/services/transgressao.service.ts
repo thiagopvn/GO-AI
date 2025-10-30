@@ -117,7 +117,7 @@ export class TransgressaoService {
   // Atualizar transgressão
   static async atualizar(id: string, transgressao: Partial<Transgressao>): Promise<void> {
     try {
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         ...transgressao,
         updatedAt: serverTimestamp()
       };
