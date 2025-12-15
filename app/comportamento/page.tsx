@@ -1,593 +1,633 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import {
-  LayoutDashboard,
-  UserCheck,
-  History,
   Search,
-  Settings,
-  Loader2,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle
+  AlertCircle,
+  CheckCircle2,
+  RefreshCw,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
+  ShieldX
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  getDocs
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
+import { Militar, ProcessoDisciplinar, ComportamentoMilitar, isPraca } from '@/types';
+import { ComportamentoService } from '@/lib/services/ComportamentoService';
 import { toast } from 'sonner';
-import { firestore } from '@/lib/firebase/config';
-import { collection, query, where, getDocs, orderBy, onSnapshot } from 'firebase/firestore';
-import { format, differenceInYears } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 
-// Tipos
-interface Militar {
-  id: string;
-  nome: string;
-  nomeCompleto: string;
-  nomeDeGuerra: string;
-  patente: string;
-  postoGraduacao: string;
-  rg: string;
-  unidade: string;
-  dataInclusao: Date;
-  ativo?: boolean;
-}
-
-interface Processo {
-  id: string;
-  militarId: string;
-  militarNome: string;
-  militarPosto: string;
-  tipoPunicao: string;
-  diasPunicao: number;
-  classificacao: string;
-  dataAbertura: Date;
-  dataFechamento?: Date;
-  decisao: string;
-  status: string;
-}
-
-enum ClassificacaoComportamento {
-  EXCEPCIONAL = 'EXCEPCIONAL',
-  OTIMO = 'ÓTIMO',
-  BOM = 'BOM',
-  INSUFICIENTE = 'INSUFICIENTE',
-  MAU = 'MAU'
-}
-
-// Função para calcular comportamento baseado em punições
-const calcularComportamento = (punicoes: Processo[], dataInclusao: Date): {
-  classificacao: ClassificacaoComportamento;
-  detalhes: string;
-} => {
-  const agora = new Date();
-
-  // Converter punições para equivalente em prisões
-  const converterParaPrisoes = (punicao: Processo): number => {
-    const tipo = punicao.tipoPunicao?.toLowerCase() || '';
-    const dias = punicao.diasPunicao || 0;
-
-    if (tipo.includes('prisao') || tipo.includes('prisão')) {
-      return dias;
-    } else if (tipo.includes('detencao') || tipo.includes('detenção')) {
-      return dias / 2; // 2 detenções = 1 prisão
-    } else if (tipo.includes('repreensao') || tipo.includes('repreensão')) {
-      return dias / 4; // 4 repreensões = 1 prisão
-    }
-    return 0;
-  };
-
-  // Filtrar punições por janela de tempo
-  const filtrarPorJanela = (anos: number) => {
-    const dataLimite = new Date(agora);
-    dataLimite.setFullYear(dataLimite.getFullYear() - anos);
-
-    return punicoes.filter(p => {
-      const dataRef = p.dataFechamento || p.dataAbertura;
-      return dataRef >= dataLimite;
-    });
-  };
-
-  // Calcular total de punições equivalentes em prisões
-  const calcularTotal = (punicoesJanela: Processo[]) => {
-    return punicoesJanela.reduce((total, p) => total + converterParaPrisoes(p), 0);
-  };
-
-  // Verificar classificação EXCEPCIONAL (8 anos sem punições)
-  const punicoes8Anos = filtrarPorJanela(8);
-  if (punicoes8Anos.length === 0) {
-    return {
-      classificacao: ClassificacaoComportamento.EXCEPCIONAL,
-      detalhes: 'Sem punições nos últimos 8 anos'
-    };
-  }
-
-  // Verificar classificação ÓTIMO (4 anos com até 1 detenção)
-  const punicoes4Anos = filtrarPorJanela(4);
-  const total4Anos = calcularTotal(punicoes4Anos);
-  if (total4Anos <= 0.5) { // Até 1 detenção (0.5 prisão)
-    return {
-      classificacao: ClassificacaoComportamento.OTIMO,
-      detalhes: `${total4Anos.toFixed(1)} prisão(ões) equivalente(s) nos últimos 4 anos`
-    };
-  }
-
-  // Verificar classificação BOM (2 anos com até 2 prisões)
-  const punicoes2Anos = filtrarPorJanela(2);
-  const total2Anos = calcularTotal(punicoes2Anos);
-  if (total2Anos <= 2) {
-    return {
-      classificacao: ClassificacaoComportamento.BOM,
-      detalhes: `${total2Anos.toFixed(1)} prisão(ões) equivalente(s) nos últimos 2 anos`
-    };
-  }
-
-  // Verificar classificação INSUFICIENTE vs MAU (1 ano)
-  const punicoes1Ano = filtrarPorJanela(1);
-  const total1Ano = calcularTotal(punicoes1Ano);
-
-  if (total1Ano <= 2) {
-    return {
-      classificacao: ClassificacaoComportamento.INSUFICIENTE,
-      detalhes: `${total1Ano.toFixed(1)} prisão(ões) equivalente(s) no último ano`
-    };
-  } else {
-    return {
-      classificacao: ClassificacaoComportamento.MAU,
-      detalhes: `${total1Ano.toFixed(1)} prisão(ões) equivalente(s) no último ano (acima de 2)`
-    };
-  }
-};
-
-// Verificar se é praça (tem classificação de comportamento)
-const isPraca = (patente: string): boolean => {
-  const pracas = ['soldado', 'cabo', 'terceiro sargento', '3º sargento',
-                  'segundo sargento', '2º sargento', 'primeiro sargento',
-                  '1º sargento', 'subtenente'];
-  return pracas.some(p => patente.toLowerCase().includes(p.toLowerCase()));
-};
+// Lazy load componentes pesados
+const ScrollArea = dynamic(() => import('@/components/ui/scroll-area').then(mod => ({ default: mod.ScrollArea })));
 
 export default function ComportamentoPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [militares, setMilitares] = useState<Militar[]>([]);
-  const [processos, setProcessos] = useState<Processo[]>([]);
+  const [processos, setProcessos] = useState<ProcessoDisciplinar[]>([]);
   const [selectedMilitar, setSelectedMilitar] = useState<Militar | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [comportamentoDetalhes, setComportamentoDetalhes] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Carregar militares do Firebase
+  // Carregar dados iniciais
   useEffect(() => {
-    const militaresRef = collection(firestore, 'militares');
-    const q = query(militaresRef, where('ativo', '!=', false));
+    carregarDados();
+  }, []);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        dataInclusao: doc.data().dataInclusao?.toDate() || new Date(),
-      })) as Militar[];
+  const carregarDados = async () => {
+    setLoading(true);
+    try {
+      // Buscar todos os militares
+      const militaresSnapshot = await getDocs(collection(db, 'militares'));
+      const militaresData = militaresSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          dataInclusao: data.dataInclusao?.toDate?.() || data.dataInclusao,
+          comportamento: data.comportamento || null, // Garantir que o campo comportamento seja incluído
+        };
+      }) as Militar[];
 
-      setMilitares(data);
+      // Buscar todos os processos finalizados com punição
+      const processosQuery = query(
+        collection(db, 'processos'),
+        where('status', '==', 'Finalizado'),
+        where('decisao', '==', 'Punição Aplicada'),
+        orderBy('dataFechamento', 'desc')
+      );
+
+      const processosSnapshot = await getDocs(processosQuery);
+      const processosData = processosSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          dataFechamento: data.dataFechamento?.toDate?.() || data.dataFechamento,
+          dataAbertura: data.dataAbertura?.toDate?.() || data.dataAbertura
+        };
+      }) as ProcessoDisciplinar[];
+
+      setMilitares(militaresData);
+      setProcessos(processosData);
+
+      // Log para debug
+      const pracasDebug = militaresData.filter(m => isPraca(m.patente));
+      console.log('Militares carregados:', militaresData.length);
+      console.log('Praças:', pracasDebug.length);
+      console.log('Amostra de comportamentos:', pracasDebug.slice(0, 5).map(m => ({
+        nome: m.nome,
+        comportamento: m.comportamento
+      })));
+
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+      toast.error('Erro ao carregar dados');
+    } finally {
       setLoading(false);
-    });
+    }
+  };
 
-    return () => unsubscribe();
-  }, []);
+  // Recalcular comportamento de todos os praças
+  const handleRecalcularTodos = async () => {
+    setRefreshing(true);
+    try {
+      const pracasParaAtualizar = militares.filter(m => isPraca(m.patente));
+      let atualizados = 0;
+      let erros = 0;
 
-  // Carregar processos do Firebase
-  useEffect(() => {
-    const processosRef = collection(firestore, 'processos');
-    const q = query(
-      processosRef,
-      where('decisao', '==', 'Punição Aplicada')
-    );
+      for (const militar of pracasParaAtualizar) {
+        if (militar.dataInclusao) {
+          try {
+            await ComportamentoService.calcularEAtualizarComportamento(militar.id);
+            atualizados++;
+          } catch (err) {
+            console.error(`Erro ao atualizar militar ${militar.nome}:`, err);
+            erros++;
+          }
+        }
+      }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        dataAbertura: doc.data().dataAbertura?.toDate() || new Date(),
-        dataFechamento: doc.data().dataFechamento?.toDate(),
-      })) as Processo[];
+      if (atualizados > 0) {
+        toast.success(`Comportamento de ${atualizados} militares atualizado!`);
+      }
 
-      setProcessos(data);
-    });
+      if (erros > 0) {
+        toast.warning(`${erros} militares não puderam ser atualizados`);
+      }
 
-    return () => unsubscribe();
-  }, []);
+      // Recarregar dados para atualizar a interface
+      await carregarDados();
+    } catch (error) {
+      console.error('Erro ao recalcular comportamentos:', error);
+      toast.error('Erro ao recalcular comportamentos');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-  // Filtrar apenas praças
+  // Obter detalhes do cálculo de comportamento de um militar
+  const carregarDetalhesComportamento = async (militarId: string) => {
+    try {
+      const detalhes = await ComportamentoService.obterDetalhesCalculo(militarId);
+      setComportamentoDetalhes(detalhes);
+      return detalhes;
+    } catch (error) {
+      console.error('Erro ao obter detalhes:', error);
+      return null;
+    }
+  };
+
+  // Filtrar praças
   const pracas = militares.filter(m => isPraca(m.patente));
 
-  // Filtrar militares baseado na busca
-  const militaresFiltrados = pracas.filter(
-    m => (m.nome?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          m.nomeCompleto?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          m.nomeDeGuerra?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          m.patente?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          m.rg?.includes(searchQuery))
+  // Filtrar militares por busca
+  const militaresFiltrados = pracas.filter(m =>
+    m.nome?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.nomeCompleto?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.nomeDeGuerra?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.patente?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.rg?.includes(searchQuery)
   );
-
-  // Calcular comportamento de um militar
-  const getComportamentoMilitar = (militar: Militar) => {
-    const punicoesMilitar = processos.filter(p => p.militarId === militar.id);
-    return calcularComportamento(punicoesMilitar, militar.dataInclusao);
-  };
 
   // Calcular estatísticas gerais
   const calcularEstatisticas = () => {
-    const distribuicao = {
-      [ClassificacaoComportamento.EXCEPCIONAL]: 0,
-      [ClassificacaoComportamento.OTIMO]: 0,
-      [ClassificacaoComportamento.BOM]: 0,
-      [ClassificacaoComportamento.INSUFICIENTE]: 0,
-      [ClassificacaoComportamento.MAU]: 0,
+    const distribuicao: {[key: string]: number} = {
+      'EXCEPCIONAL': 0,
+      'ÓTIMO': 0,
+      'BOM': 0,
+      'INSUFICIENTE': 0,
+      'MAU': 0,
     };
 
+    // Contar comportamentos dos praças
     pracas.forEach(militar => {
-      const { classificacao } = getComportamentoMilitar(militar);
-      distribuicao[classificacao]++;
+      const comportamento = militar.comportamento;
+
+      if (!comportamento) {
+        // Se não tem comportamento definido, considerar como BOM (padrão)
+        distribuicao['BOM']++;
+        return;
+      }
+
+      // Normalizar o comportamento para maiúsculas para garantir compatibilidade
+      const comportamentoNormalizado = comportamento.toString().toUpperCase();
+
+      // Mapear valores possíveis
+      switch (comportamentoNormalizado) {
+        case 'EXCEPCIONAL':
+          distribuicao['EXCEPCIONAL']++;
+          break;
+        case 'ÓTIMO':
+        case 'OTIMO':
+          distribuicao['ÓTIMO']++;
+          break;
+        case 'BOM':
+          distribuicao['BOM']++;
+          break;
+        case 'INSUFICIENTE':
+          distribuicao['INSUFICIENTE']++;
+          break;
+        case 'MAU':
+          distribuicao['MAU']++;
+          break;
+        default:
+          // Se não reconhecido, considerar como BOM
+          distribuicao['BOM']++;
+          break;
+      }
     });
+
+    // Log resumido para debug
+    console.log(`Estatísticas: ${pracas.length} praças - Excepcional: ${distribuicao['EXCEPCIONAL']}, Ótimo: ${distribuicao['ÓTIMO']}, Bom: ${distribuicao['BOM']}, Insuficiente: ${distribuicao['INSUFICIENTE']}, Mau: ${distribuicao['MAU']}`);
 
     return distribuicao;
   };
 
-  const handleSelecionarMilitar = (militar: Militar) => {
+  const handleSelecionarMilitar = async (militar: Militar) => {
     setSelectedMilitar(militar);
+    setComportamentoDetalhes(null);
     setActiveTab('individual');
+
+    // Carregar detalhes do comportamento
+    if (militar.id) {
+      await carregarDetalhesComportamento(militar.id);
+    }
   };
 
   // Renderizar badge de comportamento
-  const renderComportamentoBadge = (classificacao: ClassificacaoComportamento) => {
-    const cores = {
-      [ClassificacaoComportamento.EXCEPCIONAL]: 'bg-emerald-500 text-white',
-      [ClassificacaoComportamento.OTIMO]: 'bg-blue-500 text-white',
-      [ClassificacaoComportamento.BOM]: 'bg-green-500 text-white',
-      [ClassificacaoComportamento.INSUFICIENTE]: 'bg-yellow-500 text-white',
-      [ClassificacaoComportamento.MAU]: 'bg-red-500 text-white',
+  const renderComportamentoBadge = (classificacao: string | ComportamentoMilitar | null | undefined) => {
+    if (!classificacao) return <Badge variant="outline">Não definido</Badge>;
+
+    const cores: { [key: string]: string } = {
+      'EXCEPCIONAL': 'bg-emerald-500 text-white',
+      'ÓTIMO': 'bg-blue-500 text-white',
+      'BOM': 'bg-green-500 text-white',
+      'INSUFICIENTE': 'bg-yellow-500 text-white',
+      'MAU': 'bg-red-500 text-white',
     };
 
     return (
-      <Badge className={cores[classificacao]}>
+      <Badge className={cores[classificacao.toString()] || 'bg-gray-500 text-white'}>
         {classificacao}
       </Badge>
     );
   };
 
-  const distribuicao = calcularEstatisticas();
-  const totalComAtencao = distribuicao[ClassificacaoComportamento.INSUFICIENTE] +
-                          distribuicao[ClassificacaoComportamento.MAU];
+  // Obter ícone do comportamento
+  const getComportamentoIcon = (classificacao: string | null | undefined) => {
+    switch (classificacao) {
+      case 'EXCEPCIONAL':
+        return <ShieldCheck className="h-5 w-5 text-emerald-500" />;
+      case 'ÓTIMO':
+        return <Shield className="h-5 w-5 text-blue-500" />;
+      case 'BOM':
+        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+      case 'INSUFICIENTE':
+        return <ShieldAlert className="h-5 w-5 text-yellow-500" />;
+      case 'MAU':
+        return <ShieldX className="h-5 w-5 text-red-500" />;
+      default:
+        return <ShieldOff className="h-5 w-5 text-gray-400" />;
+    }
+  };
 
-  return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">
-          Sistema de Classificação de Comportamento
-        </h1>
-        <p className="text-muted-foreground">
-          Gestão automatizada baseada no Regulamento Disciplinar do CBMERJ
-        </p>
-      </div>
+  const estatisticas = calcularEstatisticas();
 
-      {/* Informações do Sistema */}
-      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-4 mb-6">
-        <div className="flex items-start gap-3">
-          <Settings className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-          <div className="space-y-2 text-sm">
-            <p className="font-medium text-blue-900 dark:text-blue-100">
-              Sistema de Classificação Automática Ativo
-            </p>
-            <ul className="space-y-1 text-blue-800 dark:text-blue-200">
-              <li>• Cálculo automático baseado em processos finalizados com punição</li>
-              <li>• Melhoria automática por decurso de tempo</li>
-              <li>• Aplicável exclusivamente para Praças (Sd ao SubTen)</li>
-              <li>• Baseado no Art. 52 e 55 do RDCBMERJ</li>
-            </ul>
-          </div>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Carregando dados...</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Tabs principais */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid grid-cols-3 w-full max-w-2xl">
-          <TabsTrigger value="dashboard" className="flex items-center gap-2">
-            <LayoutDashboard className="w-4 h-4" />
-            Dashboard
-          </TabsTrigger>
-          <TabsTrigger value="consultar" className="flex items-center gap-2">
-            <Search className="w-4 h-4" />
-            Consultar
-          </TabsTrigger>
-          <TabsTrigger value="individual" className="flex items-center gap-2">
-            <UserCheck className="w-4 h-4" />
-            Individual
+  return (
+    <div className="container mx-auto py-6">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-3xl font-bold">Gestão de Comportamento</h1>
+          <p className="text-muted-foreground">
+            Sistema de classificação comportamental dos militares
+          </p>
+        </div>
+        <Button
+          onClick={handleRecalcularTodos}
+          disabled={refreshing}
+          variant="outline"
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          Recalcular Todos
+        </Button>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="lista">Lista de Militares</TabsTrigger>
+          <TabsTrigger value="individual" disabled={!selectedMilitar}>
+            Análise Individual
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab: Dashboard */}
+        {/* Dashboard Tab */}
         <TabsContent value="dashboard" className="space-y-6">
-          {loading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-            </div>
-          ) : (
-            <>
-              {/* Cards de estatísticas */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium">Total de Praças</CardTitle>
-                      <UserCheck className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{pracas.length}</div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Com classificação de comportamento
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium">Bom ou Melhor</CardTitle>
-                      <TrendingUp className="w-4 h-4 text-green-600" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {pracas.length > 0
-                        ? ((distribuicao[ClassificacaoComportamento.EXCEPCIONAL] +
-                            distribuicao[ClassificacaoComportamento.OTIMO] +
-                            distribuicao[ClassificacaoComportamento.BOM]) / pracas.length * 100).toFixed(1)
-                        : 0}%
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Excelente indicador
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium">Atenção Especial</CardTitle>
-                      <AlertTriangle className="w-4 h-4 text-yellow-600" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{totalComAtencao}</div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Insuficiente ou Mau
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Distribuição por classificação */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Distribuição por Classificação</CardTitle>
-                  <CardDescription>
-                    Quantidade de militares em cada nível de comportamento
-                  </CardDescription>
+          {/* Cards de Estatísticas */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            {Object.entries(estatisticas).map(([classificacao, quantidade]) => (
+              <Card key={classificacao}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {classificacao}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {Object.entries(distribuicao).map(([classificacao, quantidade]) => {
-                      const percentual = pracas.length > 0 ? (quantidade / pracas.length) * 100 : 0;
-                      return (
-                        <div key={classificacao} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {renderComportamentoBadge(classificacao as ClassificacaoComportamento)}
-                              <span className="text-sm font-medium">{quantidade} militares</span>
-                            </div>
-                            <span className="text-sm text-muted-foreground">
-                              {percentual.toFixed(1)}%
-                            </span>
-                          </div>
-                          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary transition-all"
-                              style={{ width: `${percentual}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="text-2xl font-bold">{quantidade as number}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {pracas.length > 0
+                      ? `${(((quantidade as number) / pracas.length) * 100).toFixed(1)}%`
+                      : '0.0%'
+                    }
+                  </div>
+                  <div className="mt-2">
+                    {getComportamentoIcon(classificacao)}
                   </div>
                 </CardContent>
               </Card>
-            </>
-          )}
+            ))}
+          </div>
+
+          {/* Card de Resumo */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumo Geral</CardTitle>
+              <CardDescription>
+                Análise do comportamento de {pracas.length} praças
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Total de Praças</span>
+                  <span className="font-semibold">{pracas.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Processos Punitivos</span>
+                  <span className="font-semibold">{processos.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Precisam Atenção</span>
+                  <span className="font-semibold text-red-500">
+                    {(estatisticas['INSUFICIENTE'] || 0) + (estatisticas['MAU'] || 0)}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* Tab: Consultar */}
-        <TabsContent value="consultar" className="space-y-6">
-          <div className="space-y-4">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nome, RG ou patente..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
+        {/* Lista de Militares Tab */}
+        <TabsContent value="lista" className="space-y-4">
+          <div className="flex items-center space-x-2">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome, patente ou RG..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="max-w-md"
+            />
+          </div>
 
-            {/* Lista de militares */}
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {militaresFiltrados.map((militar) => {
-                  const { classificacao, detalhes } = getComportamentoMilitar(militar);
-                  const punicoesMilitar = processos.filter(p => p.militarId === militar.id);
-
-                  return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Militares ({militaresFiltrados.length})</CardTitle>
+              <CardDescription>
+                Clique em um militar para ver análise detalhada
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[500px]">
+                <div className="space-y-2">
+                  {militaresFiltrados.map((militar) => (
                     <Card
                       key={militar.id}
-                      className="cursor-pointer hover:shadow-lg transition-shadow"
+                      className="cursor-pointer hover:bg-accent transition-colors"
                       onClick={() => handleSelecionarMilitar(militar)}
                     >
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <CardTitle className="text-lg">
-                              {militar.nomeDeGuerra || militar.nome}
-                            </CardTitle>
-                            <CardDescription>
-                              {militar.patente} - RG: {militar.rg}
-                            </CardDescription>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-semibold">
+                              {militar.patente} {militar.nomeDeGuerra || militar.nome}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                              RG: {militar.rg} | Unidade: {militar.unidade}
+                            </p>
+                            {militar.dataInclusao && (
+                              <p className="text-xs text-muted-foreground">
+                                Inclusão: {new Date(militar.dataInclusao).toLocaleDateString('pt-BR')}
+                              </p>
+                            )}
                           </div>
-                          {renderComportamentoBadge(classificacao)}
+                          <div className="flex items-center gap-2">
+                            {getComportamentoIcon(militar.comportamento)}
+                            {renderComportamentoBadge(militar.comportamento)}
+                          </div>
                         </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">{militar.unidade}</p>
-                          <p className="text-xs text-muted-foreground">{detalhes}</p>
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="text-muted-foreground">
-                              Punições registradas: <strong>{punicoesMilitar.length}</strong>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Análise Individual Tab */}
+        <TabsContent value="individual" className="space-y-6">
+          {selectedMilitar && (
+            <>
+              {/* Informações do Militar */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>
+                        {selectedMilitar.patente} {selectedMilitar.nomeDeGuerra || selectedMilitar.nome}
+                      </CardTitle>
+                      <CardDescription>
+                        RG: {selectedMilitar.rg} | Unidade: {selectedMilitar.unidade}
+                      </CardDescription>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await ComportamentoService.calcularEAtualizarComportamento(selectedMilitar.id);
+                          await carregarDetalhesComportamento(selectedMilitar.id);
+                          await carregarDados();
+                          toast.success('Comportamento atualizado!');
+                        } catch {
+                          toast.error('Erro ao atualizar comportamento');
+                        }
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Recalcular
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {comportamentoDetalhes ? (
+                    <div className="space-y-4">
+                      {/* Dados do Militar */}
+                      <div className="p-4 bg-muted rounded-lg">
+                        <h3 className="font-semibold mb-2">Informações do Militar</h3>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Data de Inclusão:</span>
+                            <span className="ml-2 font-medium">
+                              {comportamentoDetalhes.dadosMilitar?.dataInclusao
+                                ? new Date(comportamentoDetalhes.dadosMilitar.dataInclusao).toLocaleDateString('pt-BR')
+                                : 'Não informada'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Tempo de Serviço:</span>
+                            <span className="ml-2 font-medium">
+                              {comportamentoDetalhes.dadosMilitar?.tempoServicoAnos?.toFixed(1) || '0'} anos
                             </span>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
+                      </div>
 
-            {militaresFiltrados.length === 0 && !loading && (
-              <div className="text-center py-12 text-muted-foreground">
-                <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>Nenhuma praça encontrada</p>
-                <p className="text-sm mt-1">Tente ajustar os filtros de busca</p>
-              </div>
-            )}
-          </div>
-        </TabsContent>
-
-        {/* Tab: Individual */}
-        <TabsContent value="individual" className="space-y-6">
-          {selectedMilitar ? (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-semibold mb-2">
-                  Comportamento de {selectedMilitar.nomeDeGuerra || selectedMilitar.nome}
-                </h3>
-                <p className="text-muted-foreground">
-                  {selectedMilitar.patente} - {selectedMilitar.unidade}
-                </p>
-              </div>
-
-              {(() => {
-                const { classificacao, detalhes } = getComportamentoMilitar(selectedMilitar);
-                const punicoesMilitar = processos.filter(p => p.militarId === selectedMilitar.id);
-
-                return (
-                  <>
-                    <Card>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <CardTitle>Classificação Atual</CardTitle>
-                          {renderComportamentoBadge(classificacao)}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
+                      {/* Comportamento Atual */}
+                      <div className="flex items-center justify-between p-4 border rounded-lg">
                         <div>
-                          <p className="text-sm text-muted-foreground">Justificativa</p>
-                          <p className="mt-1">{detalhes}</p>
+                          <h3 className="font-semibold">Comportamento Atual</h3>
                         </div>
-
-                        <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                          <div>
-                            <p className="text-sm text-muted-foreground">Data de Inclusão</p>
-                            <p className="mt-1">
-                              {format(selectedMilitar.dataInclusao, "dd/MM/yyyy", { locale: ptBR })}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Total de Punições</p>
-                            <p className="mt-1 text-2xl font-bold">{punicoesMilitar.length}</p>
-                          </div>
+                        <div className="flex items-center gap-2">
+                          {getComportamentoIcon(comportamentoDetalhes.comportamentoCalculado)}
+                          {renderComportamentoBadge(comportamentoDetalhes.comportamentoCalculado)}
                         </div>
-                      </CardContent>
-                    </Card>
+                      </div>
 
-                    {/* Histórico de Punições */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Histórico de Punições</CardTitle>
-                        <CardDescription>
-                          Processos finalizados com punição aplicada
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        {punicoesMilitar.length === 0 ? (
-                          <div className="text-center py-8 text-muted-foreground">
-                            <History className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                            <p>Nenhuma punição registrada</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {punicoesMilitar
-                              .sort((a, b) => {
-                                const dataA = a.dataFechamento || a.dataAbertura;
-                                const dataB = b.dataFechamento || b.dataAbertura;
-                                return dataB.getTime() - dataA.getTime();
-                              })
-                              .map((processo) => (
-                                <div
-                                  key={processo.id}
-                                  className="border rounded-lg p-3 space-y-2"
-                                >
-                                  <div className="flex items-start justify-between">
+                      {/* Análise por Janela de Tempo */}
+                      <div>
+                        <h3 className="font-semibold mb-3">Análise por Período</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <Card>
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs">Últimos 8 Anos</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="text-2xl font-bold">
+                                {typeof comportamentoDetalhes.detalhes.punicoes8Anos === 'number'
+                                  ? comportamentoDetalhes.detalhes.punicoes8Anos
+                                  : 'N/A'}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {typeof comportamentoDetalhes.detalhes.punicoes8Anos === 'string'
+                                  ? comportamentoDetalhes.detalhes.punicoes8Anos
+                                  : 'punições'}
+                              </p>
+                            </CardContent>
+                          </Card>
+
+                          <Card>
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs">Últimos 4 Anos</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="text-2xl font-bold">
+                                {typeof comportamentoDetalhes.detalhes.punicoes4Anos.total === 'number'
+                                  ? comportamentoDetalhes.detalhes.punicoes4Anos.total
+                                  : 'N/A'}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {typeof comportamentoDetalhes.detalhes.punicoes4Anos.total === 'string'
+                                  ? comportamentoDetalhes.detalhes.punicoes4Anos.total
+                                  : `${comportamentoDetalhes.detalhes.punicoes4Anos.detencoesEquivalentes} det. equiv.`}
+                              </p>
+                            </CardContent>
+                          </Card>
+
+                          <Card>
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs">Últimos 2 Anos</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="text-2xl font-bold">
+                                {typeof comportamentoDetalhes.detalhes.punicoes2Anos.total === 'number'
+                                  ? comportamentoDetalhes.detalhes.punicoes2Anos.total
+                                  : 'N/A'}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {typeof comportamentoDetalhes.detalhes.punicoes2Anos.total === 'string'
+                                  ? comportamentoDetalhes.detalhes.punicoes2Anos.total
+                                  : `${comportamentoDetalhes.detalhes.punicoes2Anos.prisoesEquivalentes} prisões equiv.`}
+                              </p>
+                            </CardContent>
+                          </Card>
+
+                          <Card>
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs">Último Ano</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="text-2xl font-bold">
+                                {typeof comportamentoDetalhes.detalhes.punicoes1Ano.total === 'number'
+                                  ? comportamentoDetalhes.detalhes.punicoes1Ano.total
+                                  : 'N/A'}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {typeof comportamentoDetalhes.detalhes.punicoes1Ano.total === 'string'
+                                  ? comportamentoDetalhes.detalhes.punicoes1Ano.total
+                                  : `${comportamentoDetalhes.detalhes.punicoes1Ano.prisoesEquivalentes} prisões equiv.`}
+                              </p>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      </div>
+
+                      {/* Histórico de Punições */}
+                      {comportamentoDetalhes.detalhes.processos.length > 0 && (
+                        <div>
+                          <h3 className="font-semibold mb-3">Histórico de Punições</h3>
+                          <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                            {comportamentoDetalhes.detalhes.processos.map((processo: ProcessoDisciplinar) => (
+                              <Card key={processo.id}>
+                                <CardContent className="p-3">
+                                  <div className="flex justify-between items-start">
                                     <div>
-                                      <p className="font-medium">
-                                        {processo.tipoPunicao?.toUpperCase()} - {processo.diasPunicao} dias
-                                      </p>
-                                      <p className="text-sm text-muted-foreground">
-                                        {format(
-                                          processo.dataFechamento || processo.dataAbertura,
-                                          "dd 'de' MMMM 'de' yyyy",
-                                          { locale: ptBR }
-                                        )}
+                                      <p className="font-medium text-sm">{processo.numero || 'Processo s/n'}</p>
+                                      <p className="text-xs text-muted-foreground">{processo.motivo}</p>
+                                      <p className="text-xs mt-1">
+                                        Fechamento: {processo.dataFechamento
+                                          ? new Date(processo.dataFechamento).toLocaleDateString('pt-BR')
+                                          : 'Não informado'}
                                       </p>
                                     </div>
-                                    <Badge variant="secondary">
-                                      {processo.classificacao?.toUpperCase()}
+                                    <Badge variant="outline" className="text-xs">
+                                      {processo.tipoPunicao}
                                     </Badge>
                                   </div>
-                                </div>
-                              ))}
+                                </CardContent>
+                              </Card>
+                            ))}
                           </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </>
-                );
-              })()}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <UserCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>Selecione um militar para ver seu comportamento</p>
-              <p className="text-sm mt-1">Use a aba &quot;Consultar&quot; para buscar militares</p>
-            </div>
+                        </div>
+                      )}
+
+                      {/* Explicação das Regras */}
+                      <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                        <div className="flex gap-2">
+                          <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                          <div className="text-sm">
+                            <p className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                              Regras de Classificação
+                            </p>
+                            <ul className="space-y-1 text-blue-800 dark:text-blue-200">
+                              <li>• <strong>Excepcional:</strong> 8 anos sem punições (requer 8+ anos de serviço)</li>
+                              <li>• <strong>Ótimo:</strong> Máx. 1 detenção em 4 anos (requer 4+ anos de serviço)</li>
+                              <li>• <strong>Bom:</strong> Menos de 2 prisões equiv. no último ano (comportamento inicial)</li>
+                              <li>• <strong>Insuficiente:</strong> Exatamente 2 prisões equiv. no último ano</li>
+                              <li>• <strong>Mau:</strong> Mais de 2 prisões equiv. no último ano</li>
+                            </ul>
+                            <p className="mt-2 text-xs">
+                              Conversões: 2 repreensões = 1 detenção | 2 detenções = 1 prisão
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Carregando detalhes do comportamento...
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
           )}
         </TabsContent>
       </Tabs>

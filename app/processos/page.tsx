@@ -1,30 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Plus,
   Search,
@@ -32,12 +15,9 @@ import {
   Download,
   FileDown,
   Calendar,
-  AlertCircle,
   Loader2,
-  User,
   Eye,
   CheckCircle,
-  XCircle,
   Edit
 } from 'lucide-react';
 import {
@@ -51,8 +31,7 @@ import {
   serverTimestamp,
   where,
   getDocs,
-  getDoc,
-  setDoc
+  getDoc
 } from 'firebase/firestore';
 import { ref, set, increment } from 'firebase/database';
 import { db, realtimeDB } from '@/lib/firebase/config';
@@ -61,21 +40,32 @@ import {
   StatusProcesso,
   TipoProcesso,
   Militar,
-  Transgressao,
   TipoPunicao
 } from '@/types';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { motion } from 'framer-motion';
-import { DocumentService } from '@/lib/services/document.service';
-import { ComportamentoService } from '@/lib/services/comportamento.service';
+import { ComportamentoService } from '@/lib/services/ComportamentoService';
 import { Combobox, ComboboxOption } from '@/components/ui/combobox';
 import { ITENS_TIPIFICACAO } from '@/lib/constants/tipificacao';
-import { ConcluirPadModal, ConclusaoPadData } from '@/components/modals/ConcluirPadModal';
-import { EditarPunicaoModal } from '@/components/modals/EditarPunicaoModal';
 import { PADService } from '@/lib/services/PADService';
 import { useAuth } from '@/contexts/AuthContext';
+
+// Lazy load componentes pesados
+const Dialog = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.Dialog })));
+const DialogContent = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogContent })));
+const DialogDescription = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogDescription })));
+const DialogFooter = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogFooter })));
+const DialogHeader = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogHeader })));
+const DialogTitle = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogTitle })));
+const DialogTrigger = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogTrigger })));
+const Textarea = dynamic(() => import('@/components/ui/textarea').then(mod => ({ default: mod.Textarea })));
+const ScrollArea = dynamic(() => import('@/components/ui/scroll-area').then(mod => ({ default: mod.ScrollArea })));
+const ConcluirPadModal = dynamic(() => import('@/components/modals/ConcluirPadModal').then(mod => ({ default: mod.ConcluirPadModal })));
+const EditarPunicaoModal = dynamic(() => import('@/components/modals/EditarPunicaoModal').then(mod => ({ default: mod.EditarPunicaoModal })));
+
+// Import type for ConclusaoPadData
+import type { ConclusaoPadData } from '@/components/modals/ConcluirPadModal';
 
 export default function ProcessosPage() {
   const { user } = useAuth();
@@ -200,14 +190,6 @@ export default function ProcessosPage() {
     return snapshot.size > 0;
   };
 
-  // Gerar número do PAD
-  const gerarNumeroPAD = () => {
-    const ano = new Date().getFullYear();
-    const mes = String(new Date().getMonth() + 1).padStart(2, '0');
-    const random = Math.floor(Math.random() * 9999) + 1;
-    return `${ano}${mes}${String(random).padStart(4, '0')}`;
-  };
-
   // Emitir PAD - CORRIGIDO para novo fluxo de ACUSAÇÃO
   const handleEmitirPAD = async () => {
     try {
@@ -317,13 +299,6 @@ export default function ProcessosPage() {
     }
   };
 
-  // Função auxiliar para remover campos undefined
-  const removeUndefinedFields = <T extends Record<string, unknown>>(obj: T): Partial<T> => {
-    return Object.fromEntries(
-      Object.entries(obj).filter(([_, value]) => value !== undefined)
-    ) as Partial<T>;
-  };
-
   // Concluir PAD com novo modal e geração de documento Despacho
   const handleConcluirPAD = async (data: ConclusaoPadData) => {
     try {
@@ -356,7 +331,7 @@ export default function ProcessosPage() {
       // Criar o PAD se ainda não existir
       let padId = selectedProcesso.padId;
       if (!padId) {
-        // @ts-ignore - Firebase Date/Timestamp conversion issue
+        // @ts-expect-error - Firebase Date/Timestamp conversion issue
         padId = await padService.criar(padData);
         // Atualizar o processo com o ID do PAD
         await updateDoc(doc(db, 'processos', selectedProcesso.id), { padId });
@@ -653,14 +628,8 @@ export default function ProcessosPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {processosFiltrados.map((processo, index) => (
-            <motion.div
-              key={processo.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <Card>
+          {processosFiltrados.map((processo) => (
+            <Card key={processo.id}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
@@ -762,8 +731,7 @@ export default function ProcessosPage() {
                     )}
                   </div>
                 </CardContent>
-              </Card>
-            </motion.div>
+            </Card>
           ))}
         </div>
       )}

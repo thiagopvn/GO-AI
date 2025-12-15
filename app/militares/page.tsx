@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,46 +16,15 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@/components/ui/alert-dialog';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import {
   Plus,
   Search,
   User,
-  Calendar,
-  Shield,
   FileText,
-  AlertCircle,
-  Edit,
   Loader2,
   Trash2,
   MoreVertical,
-  Edit2
+  Edit2,
+  RefreshCw
 } from 'lucide-react';
 import {
   collection,
@@ -65,17 +34,43 @@ import {
   onSnapshot,
   doc,
   updateDoc,
-  deleteDoc,
   serverTimestamp,
   where
 } from 'firebase/firestore';
 import { firestore } from '@/lib/firebase/config';
-import { Militar, Patente, ComportamentoMilitar, isPraca, Transgressao, ProcessoDisciplinar, StatusProcesso } from '@/types';
+import { Militar, Patente, isPraca, Transgressao, ProcessoDisciplinar, StatusProcesso } from '@/types';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { motion } from 'framer-motion';
-import { ComportamentoService } from '@/lib/services/comportamento.service';
+import { ComportamentoService } from '@/lib/services/ComportamentoService';
+
+// Lazy load componentes pesados - só carrega quando necessário
+const Tabs = dynamic(() => import('@/components/ui/tabs').then(mod => ({ default: mod.Tabs })));
+const TabsContent = dynamic(() => import('@/components/ui/tabs').then(mod => ({ default: mod.TabsContent })));
+const TabsList = dynamic(() => import('@/components/ui/tabs').then(mod => ({ default: mod.TabsList })));
+const TabsTrigger = dynamic(() => import('@/components/ui/tabs').then(mod => ({ default: mod.TabsTrigger })));
+const AlertDialog = dynamic(() => import('@/components/ui/alert-dialog').then(mod => ({ default: mod.AlertDialog })));
+const AlertDialogAction = dynamic(() => import('@/components/ui/alert-dialog').then(mod => ({ default: mod.AlertDialogAction })));
+const AlertDialogCancel = dynamic(() => import('@/components/ui/alert-dialog').then(mod => ({ default: mod.AlertDialogCancel })));
+const AlertDialogContent = dynamic(() => import('@/components/ui/alert-dialog').then(mod => ({ default: mod.AlertDialogContent })));
+const AlertDialogDescription = dynamic(() => import('@/components/ui/alert-dialog').then(mod => ({ default: mod.AlertDialogDescription })));
+const AlertDialogFooter = dynamic(() => import('@/components/ui/alert-dialog').then(mod => ({ default: mod.AlertDialogFooter })));
+const AlertDialogHeader = dynamic(() => import('@/components/ui/alert-dialog').then(mod => ({ default: mod.AlertDialogHeader })));
+const AlertDialogTitle = dynamic(() => import('@/components/ui/alert-dialog').then(mod => ({ default: mod.AlertDialogTitle })));
+const Dialog = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.Dialog })));
+const DialogContent = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogContent })));
+const DialogDescription = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogDescription })));
+const DialogFooter = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogFooter })));
+const DialogHeader = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogHeader })));
+const DialogTitle = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogTitle })));
+const DialogTrigger = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogTrigger })));
+const Select = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.Select })));
+const SelectContent = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectContent })));
+const SelectItem = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectItem })));
+const SelectTrigger = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectTrigger })));
+const SelectValue = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectValue })));
+const Textarea = dynamic(() => import('@/components/ui/textarea').then(mod => ({ default: mod.Textarea })));
+const ScrollArea = dynamic(() => import('@/components/ui/scroll-area').then(mod => ({ default: mod.ScrollArea })));
 
 enum ClassificacaoComportamento {
   EXCEPCIONAL = 'EXCEPCIONAL',
@@ -85,89 +80,7 @@ enum ClassificacaoComportamento {
   MAU = 'MAU'
 }
 
-// Função para calcular comportamento baseado em punições (mesma lógica de /comportamento)
-const calcularComportamento = (punicoes: ProcessoDisciplinar[], dataInclusao: Date): {
-  classificacao: ClassificacaoComportamento;
-  detalhes: string;
-} => {
-  const agora = new Date();
-
-  // Converter punições para equivalente em prisões
-  const converterParaPrisoes = (punicao: ProcessoDisciplinar): number => {
-    const tipo = punicao.tipoPunicao?.toLowerCase() || '';
-    const dias = punicao.diasPunicao || 0;
-
-    if (tipo.includes('prisao') || tipo.includes('prisão')) {
-      return dias;
-    } else if (tipo.includes('detencao') || tipo.includes('detenção')) {
-      return dias / 2; // 2 detenções = 1 prisão
-    } else if (tipo.includes('repreensao') || tipo.includes('repreensão')) {
-      return dias / 4; // 4 repreensões = 1 prisão
-    }
-    return 0;
-  };
-
-  // Filtrar punições por janela de tempo
-  const filtrarPorJanela = (anos: number) => {
-    const dataLimite = new Date(agora);
-    dataLimite.setFullYear(dataLimite.getFullYear() - anos);
-
-    return punicoes.filter(p => {
-      const dataRef = p.dataFechamento || p.dataAbertura;
-      return dataRef >= dataLimite;
-    });
-  };
-
-  // Calcular total de punições equivalentes em prisões
-  const calcularTotal = (punicoesJanela: ProcessoDisciplinar[]) => {
-    return punicoesJanela.reduce((total, p) => total + converterParaPrisoes(p), 0);
-  };
-
-  // Verificar classificação EXCEPCIONAL (8 anos sem punições)
-  const punicoes8Anos = filtrarPorJanela(8);
-  if (punicoes8Anos.length === 0) {
-    return {
-      classificacao: ClassificacaoComportamento.EXCEPCIONAL,
-      detalhes: 'Sem punições nos últimos 8 anos'
-    };
-  }
-
-  // Verificar classificação ÓTIMO (4 anos com até 1 detenção)
-  const punicoes4Anos = filtrarPorJanela(4);
-  const total4Anos = calcularTotal(punicoes4Anos);
-  if (total4Anos <= 0.5) { // Até 1 detenção (0.5 prisão)
-    return {
-      classificacao: ClassificacaoComportamento.OTIMO,
-      detalhes: `${total4Anos.toFixed(1)} prisão(ões) equivalente(s) nos últimos 4 anos`
-    };
-  }
-
-  // Verificar classificação BOM (2 anos com até 2 prisões)
-  const punicoes2Anos = filtrarPorJanela(2);
-  const total2Anos = calcularTotal(punicoes2Anos);
-  if (total2Anos <= 2) {
-    return {
-      classificacao: ClassificacaoComportamento.BOM,
-      detalhes: `${total2Anos.toFixed(1)} prisão(ões) equivalente(s) nos últimos 2 anos`
-    };
-  }
-
-  // Verificar classificação INSUFICIENTE vs MAU (1 ano)
-  const punicoes1Ano = filtrarPorJanela(1);
-  const total1Ano = calcularTotal(punicoes1Ano);
-
-  if (total1Ano <= 2) {
-    return {
-      classificacao: ClassificacaoComportamento.INSUFICIENTE,
-      detalhes: `${total1Ano.toFixed(1)} prisão(ões) equivalente(s) no último ano`
-    };
-  } else {
-    return {
-      classificacao: ClassificacaoComportamento.MAU,
-      detalhes: `${total1Ano.toFixed(1)} prisão(ões) equivalente(s) no último ano (acima de 2)`
-    };
-  }
-};
+// Remover função de cálculo local - agora usamos ComportamentoService
 
 export default function MilitaresPage() {
   const [militares, setMilitares] = useState<Militar[]>([]);
@@ -443,18 +356,35 @@ export default function MilitaresPage() {
     }
   };
 
-  // Calcular comportamento de um militar usando a lógica de /comportamento
+  // Obter comportamento do militar (usa o valor salvo no Firestore)
   const getComportamentoMilitar = (militar: Militar) => {
     // Se não for praça, não tem comportamento
     if (!isPraca(militar.patente)) {
       return null;
     }
 
-    // Buscar processos com punição aplicada para este militar
-    const punicoesMilitar = todosProcessos.filter(p => p.militarId === militar.id);
+    // Retornar o comportamento salvo no banco
+    return militar.comportamento ? {
+      classificacao: militar.comportamento,
+      detalhes: 'Comportamento calculado pelo sistema'
+    } : null;
+  };
 
-    // Calcular comportamento
-    return calcularComportamento(punicoesMilitar, militar.dataInclusao || new Date());
+  // Recalcular comportamento de um militar específico
+  const handleRecalcularComportamento = async (militarId: string) => {
+    try {
+      const novoComportamento = await ComportamentoService.calcularEAtualizarComportamento(militarId);
+
+      if (novoComportamento) {
+        toast.success('Comportamento atualizado com sucesso!');
+        // Os dados serão atualizados automaticamente pelo listener do Firebase
+      } else {
+        toast.info('Este militar não possui classificação de comportamento');
+      }
+    } catch (error) {
+      console.error('Erro ao recalcular comportamento:', error);
+      toast.error('Erro ao recalcular comportamento');
+    }
   };
 
   // Filtrar militares
@@ -621,82 +551,75 @@ export default function MilitaresPage() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredMilitares.map((militar, index) => (
-            <motion.div
-              key={militar.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <Card className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div
-                      className="flex-1 cursor-pointer"
-                      onClick={() => {
-                        setSelectedMilitar(militar);
-                        setIsDetailsModalOpen(true);
-                      }}
-                    >
-                      <CardTitle className="text-lg">{militar.nome}</CardTitle>
-                      <CardDescription>
-                        {militar.patente} - RG: {militar.rg || militar.matricula}
-                      </CardDescription>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setSelectedMilitar(militar);
-                            setIsDetailsModalOpen(true);
-                          }}
-                        >
-                          <User className="mr-2 h-4 w-4" />
-                          Ver Detalhes
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => openEditModal(militar)}
-                        >
-                          <Edit2 className="mr-2 h-4 w-4" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-red-600"
-                          onClick={() => {
-                            setMilitarToDelete(militar);
-                            setIsDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+          {filteredMilitares.map((militar) => (
+            <Card key={militar.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div
+                    className="flex-1 cursor-pointer"
+                    onClick={() => {
+                      setSelectedMilitar(militar);
+                      setIsDetailsModalOpen(true);
+                    }}
+                  >
+                    <CardTitle className="text-lg">{militar.nome}</CardTitle>
+                    <CardDescription>
+                      {militar.patente} - RG: {militar.rg || militar.matricula}
+                    </CardDescription>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <p className="text-sm text-gray-600">{militar.unidade}</p>
-                    {isPraca(militar.patente) && (() => {
-                      const comportamentoCalculado = getComportamentoMilitar(militar);
-                      return comportamentoCalculado ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">Comportamento:</span>
-                          {renderComportamentoBadge(comportamentoCalculado.classificacao)}
-                        </div>
-                      ) : null;
-                    })()}
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setSelectedMilitar(militar);
+                          setIsDetailsModalOpen(true);
+                        }}
+                      >
+                        <User className="mr-2 h-4 w-4" />
+                        Ver Detalhes
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => openEditModal(militar)}
+                      >
+                        <Edit2 className="mr-2 h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-red-600"
+                        onClick={() => {
+                          setMilitarToDelete(militar);
+                          setIsDeleteDialogOpen(true);
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Excluir
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">{militar.unidade}</p>
+                  {isPraca(militar.patente) && (() => {
+                    const comportamentoCalculado = getComportamentoMilitar(militar);
+                    return comportamentoCalculado ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">Comportamento:</span>
+                        {renderComportamentoBadge(comportamentoCalculado.classificacao)}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
@@ -748,9 +671,19 @@ export default function MilitaresPage() {
                       return comportamentoCalculado ? (
                         <div>
                           <p className="text-sm font-medium text-gray-500">Comportamento</p>
-                          <div className="mt-1 flex flex-col gap-1">
-                            {renderComportamentoBadge(comportamentoCalculado.classificacao)}
-                            <p className="text-xs text-gray-500 mt-1">{comportamentoCalculado.detalhes}</p>
+                          <div className="mt-1 flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                              {renderComportamentoBadge(comportamentoCalculado.classificacao)}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRecalcularComportamento(selectedMilitar.id)}
+                              >
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                Recalcular
+                              </Button>
+                            </div>
+                            <p className="text-xs text-gray-500">{comportamentoCalculado.detalhes}</p>
                           </div>
                         </div>
                       ) : null;

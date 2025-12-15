@@ -7,13 +7,9 @@ import {
   TableRow,
   TableCell,
   WidthType,
-  BorderStyle,
-  HeadingLevel,
   Packer,
-  VerticalAlign,
   ShadingType,
-  PageBreak,
-  spacing
+  HeadingLevel
 } from 'docx';
 import { ConclusaoPadData } from '@/components/modals/ConcluirPadModal';
 import { format } from 'date-fns';
@@ -184,11 +180,11 @@ export class DocumentService {
     });
 
     const buffer = await Packer.toBuffer(doc);
-    return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    return new Blob([new Uint8Array(buffer)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   }
 
-  private gerarSecaoPunicao(conclusao: ConclusaoPadData, militarNome: string, militarPosto: string): Paragraph[] {
-    const paragraphs: Paragraph[] = [];
+  private gerarSecaoPunicao(conclusao: ConclusaoPadData, _militarNome: string, _militarPosto: string): (Paragraph | Table)[] {
+    const paragraphs: (Paragraph | Table)[] = [];
 
     // Linha separadora antes dos atenuantes/agravantes
     paragraphs.push(

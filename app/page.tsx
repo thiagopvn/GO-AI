@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { StatsCard } from '@/components/dashboard/stats-card';
-import { Timeline } from '@/components/dashboard/timeline';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
 import {
   FileText,
@@ -13,10 +13,18 @@ import {
   FileCheck,
   SearchCheck
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
-import { motion } from 'framer-motion';
+
+// Lazy load componentes pesados
+const Timeline = dynamic(() => import('@/components/dashboard/timeline').then(mod => ({ default: mod.Timeline })), {
+  loading: () => <div className="bg-white rounded-lg shadow p-6 h-[400px] animate-pulse" />,
+  ssr: false
+});
+
+const Dialog = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.Dialog })));
+const DialogContent = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogContent })));
+const DialogHeader = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogHeader })));
+const DialogTitle = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogTitle })));
+const ScrollArea = dynamic(() => import('@/components/ui/scroll-area').then(mod => ({ default: mod.ScrollArea })));
 
 export default function Home() {
   const { stats, loading } = useRealtimeStats();
@@ -76,51 +84,31 @@ export default function Home() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
+      <div>
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-600 mt-2">
           Visão geral do sistema de gestão disciplinar
         </p>
-      </motion.div>
+      </div>
 
       {/* Stats Grid */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
-        className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-      >
-        {statsConfig.map((stat, index) => (
-          <motion.div
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {statsConfig.map((stat) => (
+          <StatsCard
             key={stat.modalKey}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: index * 0.1 }}
-          >
-            <StatsCard
-              title={stat.title}
-              value={stat.value}
-              description={stat.description}
-              icon={stat.icon}
-              color={stat.color}
-              loading={loading}
-              onClick={() => setSelectedModal(stat.modalKey)}
-            />
-          </motion.div>
+            title={stat.title}
+            value={stat.value}
+            description={stat.description}
+            icon={stat.icon}
+            color={stat.color}
+            loading={loading}
+            onClick={() => setSelectedModal(stat.modalKey)}
+          />
         ))}
-      </motion.div>
+      </div>
 
       {/* Timeline e Charts */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.5 }}
-        className="grid gap-8 lg:grid-cols-2"
-      >
+      <div className="grid gap-8 lg:grid-cols-2">
         <Timeline />
 
         {/* Placeholder para gráfico de comportamento */}
@@ -133,7 +121,7 @@ export default function Home() {
             Gráfico de distribuição de comportamento
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* Modal de Detalhes */}
       <Dialog open={!!selectedModal} onOpenChange={() => setSelectedModal(null)}>
