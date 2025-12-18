@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, FileText, Calendar, User, AlertCircle, ChevronRight, Clock, BarChart2, Eye, CheckCircle, XCircle, RotateCcw, Upload } from 'lucide-react';
+import { Plus, Search, FileText, Calendar, User, AlertCircle, ChevronRight, Clock, Eye, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { SindicanciaService } from '@/lib/services/sindicancia.service';
 import { Sindicancia, DistribuicaoSindicancia, Militar } from '@/types';
 import { db } from '@/lib/firebase/config';
-import { collection, getDocs, query, where, orderBy as firestoreOrderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy as firestoreOrderBy } from 'firebase/firestore';
 import { LoadingPage } from '@/components/ui/loading-page';
 
 const POSTOS_OFICIAIS = [

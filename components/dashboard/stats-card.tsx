@@ -15,14 +15,6 @@ interface StatsCardProps {
   loading?: boolean;
 }
 
-const colorVariants = {
-  blue: 'bg-blue-500',
-  green: 'bg-green-500',
-  yellow: 'bg-yellow-500',
-  red: 'bg-red-500',
-  purple: 'bg-purple-500'
-};
-
 const bgVariants = {
   blue: 'bg-blue-50',
   green: 'bg-green-50',

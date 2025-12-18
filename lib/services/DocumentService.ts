@@ -50,7 +50,8 @@ const AGRAVANTES_DOC = [
 
 export class DocumentService {
   async gerarDespacho(dados: DadosDespacho): Promise<Blob> {
-    const { conclusao, militarNome, militarPosto, processoNumero, comandanteNome, comandantePosto, comandanteRG, comandanteFuncao } = dados;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { conclusao, militarNome, militarPosto, processoNumero: _processoNumero, comandanteNome, comandantePosto, comandanteRG, comandanteFuncao } = dados;
 
     const doc = new Document({
       sections: [{
@@ -183,6 +184,7 @@ export class DocumentService {
     return new Blob([new Uint8Array(buffer)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private gerarSecaoPunicao(conclusao: ConclusaoPadData, _militarNome: string, _militarPosto: string): (Paragraph | Table)[] {
     const paragraphs: (Paragraph | Table)[] = [];
 
@@ -289,11 +291,11 @@ export class DocumentService {
     );
 
     // Números dos atenuantes e agravantes selecionados
-    const atenuantesNumeros = conclusao.atenuantes?.map((id, index) =>
+    const atenuantesNumeros = conclusao.atenuantes?.map((id) =>
       ATENUANTES_DOC.findIndex(a => a.id === id) + 1
     ).filter(n => n > 0).join(', ') || '___________';
 
-    const agravantesNumeros = conclusao.agravantes?.map((id, index) =>
+    const agravantesNumeros = conclusao.agravantes?.map((id) =>
       AGRAVANTES_DOC.findIndex(a => a.id === id) + 1
     ).filter(n => n > 0).join(', ') || '___________';
 

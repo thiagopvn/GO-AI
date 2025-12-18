@@ -101,7 +101,7 @@ export default function TimelineComportamento({
 
             {/* Eventos da timeline */}
             <div className="space-y-6">
-              {historico.map((evento, index) => {
+              {historico.map((evento) => {
                 const tipoMudanca = getTipoMudanca(
                   evento.classificacaoAnterior,
                   evento.classificacaoNova

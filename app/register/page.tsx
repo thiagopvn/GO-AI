@@ -55,7 +55,7 @@ export default function RegisterPage() {
         ativo: true
       });
       router.push('/');
-    } catch (error) {
+    } catch {
       // Erro já tratado no contexto
     } finally {
       setLoading(false);

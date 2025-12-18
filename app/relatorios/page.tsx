@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BarChart2, PieChart, TrendingUp, Users, FileText, AlertTriangle, Calendar, Download } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { TrendingUp, Users, FileText, AlertTriangle, Download } from 'lucide-react';
+import { format, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Militar, Transgressao, Sindicancia } from '@/types';
 import { db } from '@/lib/firebase/config';
-import { collection, getDocs, query, where, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { SindicanciaService } from '@/lib/services/sindicancia.service';
 import { TransgressaoService } from '@/lib/services/transgressao.service';
 
@@ -46,69 +46,60 @@ export default function RelatoriosPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    carregarDados();
-  }, [periodo]);
+    const carregarDados = async () => {
+      try {
+        setLoading(true);
 
-  const carregarDados = async () => {
-    try {
-      setLoading(true);
+        // Carregar militares
+        const militaresSnapshot = await getDocs(collection(db, 'militares'));
+        const militaresList = militaresSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Militar[];
+        setMilitares(militaresList);
 
-      // Carregar militares
-      const militaresSnapshot = await getDocs(collection(db, 'militares'));
-      const militaresList = militaresSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Militar[];
-      setMilitares(militaresList);
+        // Carregar transgressões
+        const transgressoesList = await TransgressaoService.listar();
+        setTransgressoes(transgressoesList);
 
-      // Carregar transgressões
-      const transgressoesList = await TransgressaoService.listar();
-      setTransgressoes(transgressoesList);
+        // Carregar sindicâncias
+        const sindicanciasList = await SindicanciaService.listar();
+        setSindicancias(sindicanciasList);
 
-      // Carregar sindicâncias
-      const sindicanciasList = await SindicanciaService.listar();
-      setSindicancias(sindicanciasList);
+        // Calcular estatísticas
+        const inicioMes = startOfMonth(new Date());
+        const stats: Estatisticas = {
+          totalMilitares: militaresList.length,
+          militaresAtivos: militaresList.filter(m => m.status === 'Ativo').length,
+          totalTransgressoes: transgressoesList.length,
+          transgressoesNoMes: transgressoesList.filter(t => t.data >= inicioMes).length,
+          totalSindicancias: sindicanciasList.length,
+          sindicanciasEmAndamento: sindicanciasList.filter(s => s.status === 'Em Andamento').length,
+          comportamentoPorTipo: {
+            excepcional: militaresList.filter(m => m.comportamento === 'Excepcional').length,
+            otimo: militaresList.filter(m => m.comportamento === 'Ótimo').length,
+            bom: militaresList.filter(m => m.comportamento === 'Bom').length,
+            insuficiente: militaresList.filter(m => m.comportamento === 'Insuficiente').length,
+            mau: militaresList.filter(m => m.comportamento === 'Mau').length,
+          },
+          transgressoesPorNatureza: {
+            leve: transgressoesList.filter(t => t.natureza === 'Leve').length,
+            media: transgressoesList.filter(t => t.natureza === 'Média').length,
+            grave: transgressoesList.filter(t => t.natureza === 'Grave').length,
+          }
+        };
+        setEstatisticas(stats);
 
-      // Calcular estatísticas
-      const stats = calcularEstatisticas(militaresList, transgressoesList, sindicanciasList);
-      setEstatisticas(stats);
-
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-      toast.error('Erro ao carregar dados');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const calcularEstatisticas = (
-    militaresList: Militar[],
-    transgressoesList: Transgressao[],
-    sindicanciasList: Sindicancia[]
-  ): Estatisticas => {
-    const inicioMes = startOfMonth(new Date());
-
-    return {
-      totalMilitares: militaresList.length,
-      militaresAtivos: militaresList.filter(m => m.status === 'Ativo').length,
-      totalTransgressoes: transgressoesList.length,
-      transgressoesNoMes: transgressoesList.filter(t => t.data >= inicioMes).length,
-      totalSindicancias: sindicanciasList.length,
-      sindicanciasEmAndamento: sindicanciasList.filter(s => s.status === 'Em Andamento').length,
-      comportamentoPorTipo: {
-        excepcional: militaresList.filter(m => m.comportamento === 'Excepcional').length,
-        otimo: militaresList.filter(m => m.comportamento === 'Ótimo').length,
-        bom: militaresList.filter(m => m.comportamento === 'Bom').length,
-        insuficiente: militaresList.filter(m => m.comportamento === 'Insuficiente').length,
-        mau: militaresList.filter(m => m.comportamento === 'Mau').length,
-      },
-      transgressoesPorNatureza: {
-        leve: transgressoesList.filter(t => t.natureza === 'Leve').length,
-        media: transgressoesList.filter(t => t.natureza === 'Média').length,
-        grave: transgressoesList.filter(t => t.natureza === 'Grave').length,
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error);
+        toast.error('Erro ao carregar dados');
+      } finally {
+        setLoading(false);
       }
     };
-  };
+
+    carregarDados();
+  }, [periodo]);
 
   const getComportamentoColor = (comportamento: string) => {
     switch (comportamento) {

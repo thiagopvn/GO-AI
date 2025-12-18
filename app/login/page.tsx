@@ -30,7 +30,7 @@ export default function LoginPage() {
       setLoading(true);
       await signIn(email, password);
       router.push('/');
-    } catch (error) {
+    } catch {
       // Erro já tratado no contexto
     } finally {
       setLoading(false);

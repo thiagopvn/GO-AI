@@ -444,12 +444,14 @@ export class PADGeneratorService {
     return buffer;
   }
 
-  static async gerarRelatorioSindicancia(sindicancia: Sindicancia): Promise<Blob> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static async gerarRelatorioSindicancia(_sindicancia: Sindicancia): Promise<Blob> {
     // TODO: Implementar geração de relatório de sindicância
     throw new Error('Não implementado ainda');
   }
 
-  static async gerarRelatorioComportamento(militares: Militar[]): Promise<Blob> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static async gerarRelatorioComportamento(_militares: Militar[]): Promise<Blob> {
     // TODO: Implementar geração de relatório de comportamento
     throw new Error('Não implementado ainda');
   }

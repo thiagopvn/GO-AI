@@ -3,8 +3,6 @@ import {
   Paragraph,
   TextRun,
   AlignmentType,
-  HeadingLevel,
-  PageBreak,
   Packer
 } from 'docx';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';

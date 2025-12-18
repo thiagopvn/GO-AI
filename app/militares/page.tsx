@@ -94,7 +94,7 @@ export default function MilitaresPage() {
   const [militarToDelete, setMilitarToDelete] = useState<Militar | null>(null);
   const [transgressoes, setTransgressoes] = useState<Transgressao[]>([]);
   const [processos, setProcessos] = useState<ProcessoDisciplinar[]>([]);
-  const [todosProcessos, setTodosProcessos] = useState<ProcessoDisciplinar[]>([]);
+  const [, setTodosProcessos] = useState<ProcessoDisciplinar[]>([]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -298,17 +298,6 @@ export default function MilitaresPage() {
     if (!militarToDelete) return;
 
     try {
-      // Verificar se há transgressões ou processos vinculados
-      const transgressoesQuery = query(
-        collection(firestore, 'transgressoes'),
-        where('militarId', '==', militarToDelete.id)
-      );
-
-      const processosQuery = query(
-        collection(firestore, 'processos'),
-        where('militarId', '==', militarToDelete.id)
-      );
-
       // Por segurança, podemos apenas desativar o militar ao invés de excluir
       await updateDoc(doc(firestore, 'militares', militarToDelete.id), {
         ativo: false,

@@ -10,7 +10,6 @@ import { ptBR } from 'date-fns/locale';
 import { motion } from 'framer-motion';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { firestore } from '@/lib/firebase/config';
-import { Transgressao, Militar } from '@/types';
 
 interface TimelineItem {
   id: string;

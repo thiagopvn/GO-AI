@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Save, RotateCcw, Shield, Clock, FileText, Bell, Download, Upload } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Save, RotateCcw, Download, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,11 +70,7 @@ export default function ConfiguracoesPage() {
     notificar_sindicancias: true,
   });
 
-  useEffect(() => {
-    inicializarECarregarConfiguracoes();
-  }, []);
-
-  const inicializarECarregarConfiguracoes = async () => {
+  const inicializarECarregarConfiguracoes = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -86,13 +82,15 @@ export default function ConfiguracoesPage() {
       setConfiguracoes(configsList);
 
       // Preencher formulário com valores atuais
-      const novoFormData = { ...formData };
-      for (const config of configsList) {
-        if (config.chave in novoFormData) {
-          (novoFormData as Record<string, string | number | boolean>)[config.chave] = config.valor;
+      setFormData(prev => {
+        const novoFormData = { ...prev };
+        for (const config of configsList) {
+          if (config.chave in novoFormData) {
+            (novoFormData as Record<string, string | number | boolean>)[config.chave] = config.valor;
+          }
         }
-      }
-      setFormData(novoFormData);
+        return novoFormData;
+      });
 
     } catch (error) {
       console.error('Erro ao carregar configurações:', error);
@@ -100,7 +98,11 @@ export default function ConfiguracoesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    inicializarECarregarConfiguracoes();
+  }, [inicializarECarregarConfiguracoes]);
 
   const handleSave = async () => {
     try {
