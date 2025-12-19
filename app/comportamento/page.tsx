@@ -16,7 +16,8 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShieldOff,
-  ShieldX
+  ShieldX,
+  History
 } from 'lucide-react';
 import {
   collection,
@@ -26,14 +27,18 @@ import {
   getDocs
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import { Militar, ProcessoDisciplinar, ComportamentoMilitar, isPraca } from '@/types';
+import { Militar, ProcessoDisciplinar, ComportamentoMilitar, isPraca, TipoProcesso, StatusProcesso } from '@/types';
 import { ComportamentoService } from '@/lib/services/ComportamentoService';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { LancarPunicaoAntigaModal, PunicaoAntigaData } from '@/components/modals/LancarPunicaoAntigaModal';
+import { addDoc, doc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 
 // Lazy load componentes pesados
 const ScrollArea = dynamic(() => import('@/components/ui/scroll-area').then(mod => ({ default: mod.ScrollArea })));
 
 export default function ComportamentoPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [militares, setMilitares] = useState<Militar[]>([]);
@@ -43,6 +48,10 @@ export default function ComportamentoPage() {
   const [comportamentoDetalhes, setComportamentoDetalhes] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Estados para o modal de lançar punição antiga
+  const [isLancarPunicaoModalOpen, setIsLancarPunicaoModalOpen] = useState(false);
+  const [isLancandoPunicao, setIsLancandoPunicao] = useState(false);
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -150,6 +159,120 @@ export default function ComportamentoPage() {
     } catch (error) {
       console.error('Erro ao obter detalhes:', error);
       return null;
+    }
+  };
+
+  // Lançar punição antiga do sistema DGP
+  const handleLancarPunicaoAntiga = async (data: PunicaoAntigaData) => {
+    try {
+      setIsLancandoPunicao(true);
+
+      if (!user) {
+        toast.error('Usuario nao autenticado');
+        return;
+      }
+
+      // Gerar número do processo para registro interno
+      const dataFormatada = new Date(data.dataPunicao).toISOString().split('T')[0].replace(/-/g, '');
+      const numeroProcesso = `DGP/HISTORICO/${dataFormatada}/${data.militarId.substring(0, 6)}`;
+
+      // Mapear tipo de punição para o formato esperado
+      const tipoPunicaoMap: Record<string, string> = {
+        'repreensao': 'Repreensão',
+        'detencao': 'Detenção',
+        'prisao': 'Prisão'
+      };
+
+      // 1. Criar registro na coleção 'processos' (usado pelo ComportamentoService)
+      const processoData = {
+        tipo: TipoProcesso.PAD,
+        numero: numeroProcesso,
+        militarId: data.militarId,
+        militarNome: data.militarNome,
+        militarPosto: data.militarPosto,
+        dataAbertura: Timestamp.fromDate(data.dataPunicao),
+        dataFechamento: Timestamp.fromDate(data.dataPunicao),
+        status: StatusProcesso.FINALIZADO,
+        decisao: 'Punição Aplicada',
+        motivo: data.descricao,
+        tipoPunicao: tipoPunicaoMap[data.tipoPunicao],
+        diasPunicao: data.diasPunicao || 0,
+        dataInicioPunicao: data.dataInicioPunicao ? Timestamp.fromDate(data.dataInicioPunicao) : null,
+        observacoes: data.observacoes || 'Punição lançada do sistema DGP',
+        origemDGP: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: user.uid
+      };
+
+      const processoRef = await addDoc(collection(db, 'processos'), processoData);
+
+      // 2. Criar registro na coleção 'pads' para manter consistência
+      const padData = {
+        numeroProcesso: numeroProcesso,
+        militarId: data.militarId,
+        militarNome: data.militarNome,
+        militarPosto: data.militarPosto,
+        dataAbertura: Timestamp.fromDate(data.dataPunicao),
+        dataConclusao: Timestamp.fromDate(data.dataPunicao),
+        status: 'finalizado',
+        descricao: data.descricao,
+        decisao: 'punir',
+        tipoPunicao: data.tipoPunicao,
+        diasPunicao: data.diasPunicao || 0,
+        dataInicioPunicao: data.dataInicioPunicao ? Timestamp.fromDate(data.dataInicioPunicao) : null,
+        observacoes: data.observacoes || 'Punição lançada do sistema DGP',
+        origemDGP: true,
+        criadoPor: user.uid,
+        concluidoPor: user.uid,
+        atualizadoEm: serverTimestamp()
+      };
+
+      const padRef = await addDoc(collection(db, 'pads'), padData);
+
+      // 3. Atualizar o processo com referência ao PAD
+      await updateDoc(doc(db, 'processos', processoRef.id), {
+        padId: padRef.id
+      });
+
+      // 4. Criar registro na coleção 'transgressoes' para histórico
+      const transgressaoData = {
+        militarId: data.militarId,
+        militarNome: data.militarNome,
+        militarPosto: data.militarPosto,
+        padId: padRef.id,
+        numeroProcesso: numeroProcesso,
+        data: Timestamp.fromDate(data.dataPunicao),
+        descricao: data.descricao,
+        tipoPunicao: tipoPunicaoMap[data.tipoPunicao],
+        diasPunicao: data.diasPunicao || 0,
+        dataInicioPunicao: data.dataInicioPunicao ? Timestamp.fromDate(data.dataInicioPunicao) : null,
+        observacoes: data.observacoes || 'Punição lançada do sistema DGP',
+        origemDGP: true,
+        criadoPor: user.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      await addDoc(collection(db, 'transgressoes'), transgressaoData);
+
+      // 5. Recalcular comportamento do militar
+      await ComportamentoService.calcularEAtualizarComportamento(data.militarId);
+
+      // 6. Recarregar dados
+      await carregarDados();
+      if (selectedMilitar && selectedMilitar.id === data.militarId) {
+        await carregarDetalhesComportamento(data.militarId);
+      }
+
+      toast.success('Punicao lancada com sucesso! Comportamento atualizado.');
+      setIsLancarPunicaoModalOpen(false);
+
+    } catch (error) {
+      console.error('Erro ao lançar punição:', error);
+      toast.error('Erro ao lançar punição: ' + (error as Error).message);
+    } finally {
+      setIsLancandoPunicao(false);
     }
   };
 
@@ -437,23 +560,34 @@ export default function ComportamentoPage() {
                         RG: {selectedMilitar.rg} | Unidade: {selectedMilitar.unidade}
                       </CardDescription>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          await ComportamentoService.calcularEAtualizarComportamento(selectedMilitar.id);
-                          await carregarDetalhesComportamento(selectedMilitar.id);
-                          await carregarDados();
-                          toast.success('Comportamento atualizado!');
-                        } catch {
-                          toast.error('Erro ao atualizar comportamento');
-                        }
-                      }}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Recalcular
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            await ComportamentoService.calcularEAtualizarComportamento(selectedMilitar.id);
+                            await carregarDetalhesComportamento(selectedMilitar.id);
+                            await carregarDados();
+                            toast.success('Comportamento atualizado!');
+                          } catch {
+                            toast.error('Erro ao atualizar comportamento');
+                          }
+                        }}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Recalcular
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                        onClick={() => setIsLancarPunicaoModalOpen(true)}
+                      >
+                        <History className="h-4 w-4 mr-2" />
+                        Lancar Punicao DGP
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -631,6 +765,16 @@ export default function ComportamentoPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Modal de Lançar Punição Antiga do DGP */}
+      <LancarPunicaoAntigaModal
+        isOpen={isLancarPunicaoModalOpen}
+        onClose={() => setIsLancarPunicaoModalOpen(false)}
+        onSubmit={handleLancarPunicaoAntiga}
+        militares={militares}
+        militarPreSelecionado={selectedMilitar}
+        isLoading={isLancandoPunicao}
+      />
     </div>
   );
 }

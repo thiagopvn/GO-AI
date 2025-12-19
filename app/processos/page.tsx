@@ -18,7 +18,8 @@ import {
   Loader2,
   Eye,
   CheckCircle,
-  Edit
+  Edit,
+  History
 } from 'lucide-react';
 import {
   collection,
@@ -65,6 +66,8 @@ const EditarPunicaoModal = dynamic(() => import('@/components/modals/EditarPunic
 
 // Import type for ConclusaoPadData
 import type { ConclusaoPadData } from '@/components/modals/ConcluirPadModal';
+import { LancarPunicaoAntigaModal, PunicaoAntigaData } from '@/components/modals/LancarPunicaoAntigaModal';
+import { Timestamp } from 'firebase/firestore';
 
 export default function ProcessosPage() {
   const { user } = useAuth();
@@ -82,6 +85,10 @@ export default function ProcessosPage() {
   const [selectedProcesso, setSelectedProcesso] = useState<ProcessoDisciplinar | null>(null);
   const [isConcluindo, setIsConcluindo] = useState(false);
   const [isEditandoPunicao, setIsEditandoPunicao] = useState(false);
+
+  // Estados para o modal de lançar punição antiga
+  const [isLancarPunicaoModalOpen, setIsLancarPunicaoModalOpen] = useState(false);
+  const [isLancandoPunicao, setIsLancandoPunicao] = useState(false);
 
   // Form state para novo PAD - CORRIGIDO: campos de ACUSAÇÃO, não de punição
   const [formData, setFormData] = useState({
@@ -420,6 +427,114 @@ export default function ProcessosPage() {
     });
   };
 
+  // Lançar punição antiga do sistema DGP
+  const handleLancarPunicaoAntiga = async (data: PunicaoAntigaData) => {
+    try {
+      setIsLancandoPunicao(true);
+
+      if (!user) {
+        toast.error('Usuario nao autenticado');
+        return;
+      }
+
+      // Gerar número do processo para registro interno
+      const dataFormatada = format(data.dataPunicao, 'ddMMyyyy');
+      const numeroProcesso = `DGP/HISTORICO/${dataFormatada}/${data.militarId.substring(0, 6)}`;
+
+      // Mapear tipo de punição para o formato esperado
+      const tipoPunicaoMap: Record<string, string> = {
+        'repreensao': 'Repreensão',
+        'detencao': 'Detenção',
+        'prisao': 'Prisão'
+      };
+
+      // 1. Criar registro na coleção 'processos' (usado pelo ComportamentoService)
+      const processoData = {
+        tipo: TipoProcesso.PAD,
+        numero: numeroProcesso,
+        militarId: data.militarId,
+        militarNome: data.militarNome,
+        militarPosto: data.militarPosto,
+        dataAbertura: Timestamp.fromDate(data.dataPunicao),
+        dataFechamento: Timestamp.fromDate(data.dataPunicao),
+        status: StatusProcesso.FINALIZADO,
+        decisao: 'Punição Aplicada',
+        motivo: data.descricao,
+        tipoPunicao: tipoPunicaoMap[data.tipoPunicao],
+        diasPunicao: data.diasPunicao || 0,
+        dataInicioPunicao: data.dataInicioPunicao ? Timestamp.fromDate(data.dataInicioPunicao) : null,
+        observacoes: data.observacoes || 'Punição lançada do sistema DGP',
+        origemDGP: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: user.uid
+      };
+
+      const processoRef = await addDoc(collection(db, 'processos'), processoData);
+
+      // 2. Criar registro na coleção 'pads' para manter consistência
+      const padData = {
+        numeroProcesso: numeroProcesso,
+        militarId: data.militarId,
+        militarNome: data.militarNome,
+        militarPosto: data.militarPosto,
+        dataAbertura: Timestamp.fromDate(data.dataPunicao),
+        dataConclusao: Timestamp.fromDate(data.dataPunicao),
+        status: 'finalizado',
+        descricao: data.descricao,
+        decisao: 'punir',
+        tipoPunicao: data.tipoPunicao,
+        diasPunicao: data.diasPunicao || 0,
+        dataInicioPunicao: data.dataInicioPunicao ? Timestamp.fromDate(data.dataInicioPunicao) : null,
+        observacoes: data.observacoes || 'Punição lançada do sistema DGP',
+        origemDGP: true,
+        criadoPor: user.uid,
+        concluidoPor: user.uid,
+        atualizadoEm: serverTimestamp()
+      };
+
+      const padRef = await addDoc(collection(db, 'pads'), padData);
+
+      // 3. Atualizar o processo com referência ao PAD
+      await updateDoc(doc(db, 'processos', processoRef.id), {
+        padId: padRef.id
+      });
+
+      // 4. Criar registro na coleção 'transgressoes' para histórico
+      const transgressaoData = {
+        militarId: data.militarId,
+        militarNome: data.militarNome,
+        militarPosto: data.militarPosto,
+        padId: padRef.id,
+        numeroProcesso: numeroProcesso,
+        data: Timestamp.fromDate(data.dataPunicao),
+        descricao: data.descricao,
+        tipoPunicao: tipoPunicaoMap[data.tipoPunicao],
+        diasPunicao: data.diasPunicao || 0,
+        dataInicioPunicao: data.dataInicioPunicao ? Timestamp.fromDate(data.dataInicioPunicao) : null,
+        observacoes: data.observacoes || 'Punição lançada do sistema DGP',
+        origemDGP: true,
+        criadoPor: user.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      await addDoc(collection(db, 'transgressoes'), transgressaoData);
+
+      // 5. Recalcular comportamento do militar
+      await ComportamentoService.calcularEAtualizarComportamento(data.militarId);
+
+      toast.success('Punicao lancada com sucesso! Comportamento atualizado.');
+      setIsLancarPunicaoModalOpen(false);
+
+    } catch (error) {
+      console.error('Erro ao lançar punição:', error);
+      toast.error('Erro ao lançar punição: ' + (error as Error).message);
+    } finally {
+      setIsLancandoPunicao(false);
+    }
+  };
+
   // Filtrar processos
   const processosFiltrados = processos.filter(processo => {
     const matchesSearch = processo.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -442,13 +557,22 @@ export default function ProcessosPage() {
             Gestão e emissão de PADs
           </p>
         </div>
-        <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-red-600 hover:bg-red-700">
-              <Plus className="mr-2 h-4 w-4" />
-              Emitir PAD
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="text-orange-600 border-orange-300 hover:bg-orange-50"
+            onClick={() => setIsLancarPunicaoModalOpen(true)}
+          >
+            <History className="mr-2 h-4 w-4" />
+            Lancar Punicao DGP
+          </Button>
+          <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-red-600 hover:bg-red-700">
+                <Plus className="mr-2 h-4 w-4" />
+                Emitir PAD
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Emitir Processo Administrativo Disciplinar</DialogTitle>
@@ -573,6 +697,7 @@ export default function ProcessosPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      </div>
       </div>
 
       {/* Search e Tabs */}
@@ -863,6 +988,16 @@ export default function ProcessosPage() {
         diasPunicaoAtual={selectedProcesso?.diasPunicao || 0}
         dataInicioPunicaoAtual={selectedProcesso?.dataInicioPunicao || new Date()}
         isLoading={isEditandoPunicao}
+      />
+
+      {/* Modal de Lançar Punição Antiga do DGP */}
+      <LancarPunicaoAntigaModal
+        isOpen={isLancarPunicaoModalOpen}
+        onClose={() => setIsLancarPunicaoModalOpen(false)}
+        onSubmit={handleLancarPunicaoAntiga}
+        militares={militares}
+        militarPreSelecionado={null}
+        isLoading={isLancandoPunicao}
       />
     </div>
   );
