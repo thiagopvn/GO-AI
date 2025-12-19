@@ -33,8 +33,7 @@ import {
   getDocs,
   getDoc
 } from 'firebase/firestore';
-import { ref, set, increment } from 'firebase/database';
-import { db, realtimeDB } from '@/lib/firebase/config';
+import { db } from '@/lib/firebase/config';
 import {
   ProcessoDisciplinar,
   StatusProcesso,
@@ -277,16 +276,6 @@ export default function ProcessosPage() {
         documentoUrl: documentUrl
       });
 
-      // Atualizar estatísticas no Realtime Database
-      const statsRef = ref(realtimeDB, 'dashboard/stats');
-      await set(statsRef, {
-        padsEmAndamento: increment(1)
-      });
-
-      if (reincidente) {
-        await set(ref(realtimeDB, 'dashboard/stats/totalReincidentes'), increment(1));
-      }
-
       toast.success('PAD emitido com sucesso! Documento gerado.');
       setIsAddModalOpen(false);
       resetForm();
@@ -370,13 +359,6 @@ export default function ProcessosPage() {
           await ComportamentoService.atualizarComportamentoDoMilitar(militar);
         }
       }
-
-      // Atualizar estatísticas
-      const statsRef = ref(realtimeDB, 'dashboard/stats');
-      await set(statsRef, {
-        padsEmAndamento: increment(-1),
-        padsFinalizados: increment(1)
-      });
 
       const mensagem = data.decisao === 'punir'
         ? 'PAD concluído com punição aplicada! Documento Despacho gerado.'
