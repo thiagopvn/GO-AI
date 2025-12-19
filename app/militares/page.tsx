@@ -24,7 +24,10 @@ import {
   Trash2,
   MoreVertical,
   Edit2,
-  RefreshCw
+  RefreshCw,
+  Filter,
+  X,
+  ChevronDown
 } from 'lucide-react';
 import {
   collection,
@@ -66,7 +69,10 @@ const DialogTitle = dynamic(() => import('@/components/ui/dialog').then(mod => (
 const DialogTrigger = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.DialogTrigger })));
 const Select = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.Select })));
 const SelectContent = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectContent })));
+const SelectGroup = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectGroup })));
 const SelectItem = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectItem })));
+const SelectLabel = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectLabel })));
+const SelectSeparator = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectSeparator })));
 const SelectTrigger = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectTrigger })));
 const SelectValue = dynamic(() => import('@/components/ui/select').then(mod => ({ default: mod.SelectValue })));
 const Textarea = dynamic(() => import('@/components/ui/textarea').then(mod => ({ default: mod.Textarea })));
@@ -80,12 +86,33 @@ enum ClassificacaoComportamento {
   MAU = 'MAU'
 }
 
+// Agrupamento de patentes para o filtro
+const PATENTES_OFICIAIS = [
+  Patente.CORONEL,
+  Patente.TENENTE_CORONEL,
+  Patente.MAJOR,
+  Patente.CAPITAO,
+  Patente.PRIMEIRO_TENENTE,
+  Patente.SEGUNDO_TENENTE,
+  Patente.ASPIRANTE
+];
+
+const PATENTES_PRACAS = [
+  Patente.SUBTENENTE,
+  Patente.PRIMEIRO_SARGENTO,
+  Patente.SEGUNDO_SARGENTO,
+  Patente.TERCEIRO_SARGENTO,
+  Patente.CABO,
+  Patente.SOLDADO
+];
+
 // Remover função de cálculo local - agora usamos ComportamentoService
 
 export default function MilitaresPage() {
   const [militares, setMilitares] = useState<Militar[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [patenteFilter, setPatenteFilter] = useState<string>('todas');
   const [selectedMilitar, setSelectedMilitar] = useState<Militar | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -376,13 +403,33 @@ export default function MilitaresPage() {
     }
   };
 
-  // Filtrar militares
-  const filteredMilitares = militares.filter(
-    (militar) =>
+  // Contar militares por patente para exibir no filtro
+  const contagemPorPatente = militares.reduce((acc, militar) => {
+    const patente = militar.patente;
+    acc[patente] = (acc[patente] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Filtrar militares por busca e patente
+  const filteredMilitares = militares.filter((militar) => {
+    const matchSearch =
       militar.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
       militar.matricula.includes(searchTerm) ||
-      militar.patente.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      militar.patente.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchPatente =
+      patenteFilter === 'todas' ||
+      patenteFilter === 'oficiais' && PATENTES_OFICIAIS.includes(militar.patente as Patente) ||
+      patenteFilter === 'pracas' && PATENTES_PRACAS.includes(militar.patente as Patente) ||
+      militar.patente === patenteFilter;
+
+    return matchSearch && matchPatente;
+  });
+
+  // Limpar filtro de patente
+  const handleClearFilter = () => {
+    setPatenteFilter('todas');
+  };
 
   // Renderizar badge de comportamento
   const renderComportamentoBadge = (classificacao: ClassificacaoComportamento | string | undefined) => {
@@ -522,16 +569,125 @@ export default function MilitaresPage() {
         </Dialog>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          placeholder="Buscar por nome, RG ou patente..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
+      {/* Search e Filtros */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        {/* Campo de busca */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Buscar por nome, RG ou patente..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+
+        {/* Filtro por Patente/Graduação */}
+        <div className="flex items-center gap-2">
+          <Select value={patenteFilter} onValueChange={setPatenteFilter}>
+            <SelectTrigger className="w-[220px]">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gray-500" />
+                <SelectValue placeholder="Filtrar por patente" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">
+                <span className="flex items-center justify-between w-full">
+                  Todas as patentes
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    {militares.length}
+                  </Badge>
+                </span>
+              </SelectItem>
+
+              <SelectSeparator />
+
+              {/* Grupos de Patentes */}
+              <SelectItem value="oficiais">
+                <span className="flex items-center justify-between w-full font-medium text-blue-600">
+                  Oficiais
+                  <Badge variant="outline" className="ml-2 text-xs border-blue-200 text-blue-600">
+                    {militares.filter(m => PATENTES_OFICIAIS.includes(m.patente as Patente)).length}
+                  </Badge>
+                </span>
+              </SelectItem>
+              <SelectItem value="pracas">
+                <span className="flex items-center justify-between w-full font-medium text-green-600">
+                  Praças
+                  <Badge variant="outline" className="ml-2 text-xs border-green-200 text-green-600">
+                    {militares.filter(m => PATENTES_PRACAS.includes(m.patente as Patente)).length}
+                  </Badge>
+                </span>
+              </SelectItem>
+
+              <SelectSeparator />
+
+              {/* Oficiais */}
+              <SelectGroup>
+                <SelectLabel className="font-semibold text-blue-700">Oficiais</SelectLabel>
+                {PATENTES_OFICIAIS.map((patente) => (
+                  <SelectItem key={patente} value={patente}>
+                    <span className="flex items-center justify-between w-full">
+                      {patente}
+                      {contagemPorPatente[patente] > 0 && (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          {contagemPorPatente[patente]}
+                        </Badge>
+                      )}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+
+              <SelectSeparator />
+
+              {/* Praças */}
+              <SelectGroup>
+                <SelectLabel className="font-semibold text-green-700">Praças</SelectLabel>
+                {PATENTES_PRACAS.map((patente) => (
+                  <SelectItem key={patente} value={patente}>
+                    <span className="flex items-center justify-between w-full">
+                      {patente}
+                      {contagemPorPatente[patente] > 0 && (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          {contagemPorPatente[patente]}
+                        </Badge>
+                      )}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          {/* Botão para limpar filtro */}
+          {patenteFilter !== 'todas' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleClearFilter}
+              className="h-9 w-9 text-gray-500 hover:text-gray-700"
+              title="Limpar filtro"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Indicador de filtro ativo */}
+      {patenteFilter !== 'todas' && (
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="bg-red-50 border-red-200 text-red-700 px-3 py-1">
+            <Filter className="h-3 w-3 mr-1" />
+            Filtrado por: {patenteFilter === 'oficiais' ? 'Oficiais' : patenteFilter === 'pracas' ? 'Praças' : patenteFilter}
+          </Badge>
+          <span className="text-sm text-gray-500">
+            {filteredMilitares.length} {filteredMilitares.length === 1 ? 'resultado' : 'resultados'}
+          </span>
+        </div>
+      )}
 
       {/* Lista de Militares */}
       {loading ? (
