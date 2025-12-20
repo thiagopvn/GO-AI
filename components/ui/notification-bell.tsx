@@ -18,29 +18,32 @@ import { toast } from 'sonner';
 import { NotificacaoService } from '@/lib/services/notificacao.service';
 import { Notificacao } from '@/types';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function NotificationBell() {
+  const { user } = useAuth();
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [naoLidas, setNaoLidas] = useState(0);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    carregarNotificacoes();
-
-    // Verificar notificações a cada 30 segundos
-    const interval = setInterval(() => {
+    if (user?.uid) {
       carregarNotificacoes();
-    }, 30000);
 
-    return () => clearInterval(interval);
-  }, []);
+      // Verificar notificações a cada 30 segundos
+      const interval = setInterval(() => {
+        carregarNotificacoes();
+      }, 30000);
+
+      return () => clearInterval(interval);
+    }
+  }, [user?.uid]);
 
   const carregarNotificacoes = async () => {
     try {
-      // TODO: Pegar usuário do contexto
-      const userId = 'user-id';
+      if (!user?.uid) return;
 
-      const notificacoesList = await NotificacaoService.listar(userId, 10);
+      const notificacoesList = await NotificacaoService.listar(user.uid, 10);
       setNotificacoes(notificacoesList);
 
       const qtdNaoLidas = notificacoesList.filter(n => !n.lida).length;
@@ -61,10 +64,9 @@ export function NotificationBell() {
 
   const marcarTodasComoLidas = async () => {
     try {
-      // TODO: Pegar usuário do contexto
-      const userId = 'user-id';
+      if (!user?.uid) return;
 
-      await NotificacaoService.marcarTodasComoLidas(userId);
+      await NotificacaoService.marcarTodasComoLidas(user.uid);
       await carregarNotificacoes();
       toast.success('Todas as notificações foram marcadas como lidas');
     } catch (error) {

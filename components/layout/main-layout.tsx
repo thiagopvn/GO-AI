@@ -4,7 +4,7 @@ import { ReactNode, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from './sidebar';
-import { Loader2, LogOut, User } from 'lucide-react';
+import { Loader2, LogOut, User, Settings } from 'lucide-react';
 import { NotificationBell } from '@/components/ui/notification-bell';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,9 +25,22 @@ interface MainLayoutProps {
 const publicRoutes = ['/login', '/register', '/forgot-password'];
 
 export function MainLayout({ children }: MainLayoutProps) {
-  const { user, loading } = useAuth();
+  const { user, userData, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      router.push('/login');
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+    }
+  };
+
+  const handlePerfil = () => {
+    router.push('/configuracoes');
+  };
 
   useEffect(() => {
     if (!loading && !user && !publicRoutes.includes(pathname)) {
@@ -82,16 +95,17 @@ export function MainLayout({ children }: MainLayoutProps) {
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{user?.displayName || 'Usuário'}</p>
+                      <p className="text-sm font-medium leading-none">{userData?.nome || user?.displayName || 'Usuário'}</p>
+                      <p className="text-xs leading-none text-muted-foreground">{userData?.patente}</p>
                       <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={handlePerfil} className="cursor-pointer">
                     <User className="mr-2 h-4 w-4" />
                     Perfil
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600 focus:text-red-600">
                     <LogOut className="mr-2 h-4 w-4" />
                     Sair
                   </DropdownMenuItem>

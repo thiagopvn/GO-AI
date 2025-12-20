@@ -31,6 +31,14 @@ const textVariants = {
   purple: 'text-purple-600'
 };
 
+const ringVariants = {
+  blue: 'hover:ring-blue-500',
+  green: 'hover:ring-green-500',
+  yellow: 'hover:ring-yellow-500',
+  red: 'hover:ring-red-500',
+  purple: 'hover:ring-purple-500'
+};
+
 export function StatsCard({
   title,
   value,
@@ -50,7 +58,7 @@ export function StatsCard({
         className={cn(
           'cursor-pointer transition-all hover:shadow-lg',
           onClick && 'hover:ring-2 hover:ring-offset-2',
-          onClick && `hover:ring-${color}-500`
+          onClick && ringVariants[color]
         )}
         onClick={onClick}
       >
