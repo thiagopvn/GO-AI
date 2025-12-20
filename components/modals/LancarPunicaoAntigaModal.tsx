@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -21,10 +21,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Calendar, AlertTriangle, History } from 'lucide-react';
-import { format } from 'date-fns';
+import { Loader2, Calendar, AlertTriangle, History, ChevronLeft, ChevronRight } from 'lucide-react';
+import { format, getMonth, getYear, getDaysInMonth, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import {
   Popover,
   PopoverContent,
@@ -33,6 +32,243 @@ import {
 import { cn } from '@/lib/utils';
 import { Combobox, ComboboxOption } from '@/components/ui/combobox';
 import { Militar } from '@/types';
+
+// Componente de seletor de data melhorado para datas antigas
+interface DatePickerWithYearMonthProps {
+  date: Date | undefined;
+  onDateChange: (date: Date | undefined) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  maxDate?: Date;
+}
+
+const MESES = [
+  'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
+
+function DatePickerWithYearMonth({
+  date,
+  onDateChange,
+  placeholder = 'Selecione a data',
+  maxDate = new Date(),
+}: DatePickerWithYearMonthProps) {
+  const anoAtual = getYear(new Date());
+  const mesAtual = getMonth(new Date());
+
+  // Estado para navegacao
+  const [anoSelecionado, setAnoSelecionado] = useState(date ? getYear(date) : anoAtual);
+  const [mesSelecionado, setMesSelecionado] = useState(date ? getMonth(date) : mesAtual);
+  const [diaSelecionado, setDiaSelecionado] = useState(date ? date.getDate() : 0);
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Atualizar estado quando a data muda externamente
+  useEffect(() => {
+    if (date) {
+      setAnoSelecionado(getYear(date));
+      setMesSelecionado(getMonth(date));
+      setDiaSelecionado(date.getDate());
+    }
+  }, [date]);
+
+  // Gerar lista de anos (dos ultimos 50 anos ate o ano atual)
+  const anos = useMemo(() => {
+    const listaAnos = [];
+    for (let ano = anoAtual; ano >= anoAtual - 50; ano--) {
+      listaAnos.push(ano);
+    }
+    return listaAnos;
+  }, [anoAtual]);
+
+  // Calcular dias do mes selecionado
+  const diasNoMes = useMemo(() => {
+    const dataRef = new Date(anoSelecionado, mesSelecionado, 1);
+    return getDaysInMonth(dataRef);
+  }, [anoSelecionado, mesSelecionado]);
+
+  // Gerar lista de dias
+  const dias = useMemo(() => {
+    const listaDias = [];
+    for (let dia = 1; dia <= diasNoMes; dia++) {
+      const dataTestada = new Date(anoSelecionado, mesSelecionado, dia);
+      const desabilitado = isAfter(dataTestada, maxDate);
+      listaDias.push({ dia, desabilitado });
+    }
+    return listaDias;
+  }, [diasNoMes, anoSelecionado, mesSelecionado, maxDate]);
+
+  // Verificar se o mes esta desabilitado (futuro)
+  const mesDesabilitado = (mes: number) => {
+    if (anoSelecionado < anoAtual) return false;
+    if (anoSelecionado === anoAtual && mes > mesAtual) return true;
+    return false;
+  };
+
+  const handleDiaClick = (dia: number) => {
+    const novaData = new Date(anoSelecionado, mesSelecionado, dia);
+    if (!isAfter(novaData, maxDate)) {
+      setDiaSelecionado(dia);
+      onDateChange(novaData);
+      setIsOpen(false);
+    }
+  };
+
+  const handleAnoChange = (novoAno: string) => {
+    const ano = parseInt(novoAno);
+    setAnoSelecionado(ano);
+
+    // Ajustar mes se necessario
+    if (ano === anoAtual && mesSelecionado > mesAtual) {
+      setMesSelecionado(mesAtual);
+    }
+
+    // Resetar dia se a data selecionada seria invalida
+    setDiaSelecionado(0);
+  };
+
+  const handleMesChange = (novoMes: string) => {
+    const mes = parseInt(novoMes);
+    setMesSelecionado(mes);
+    setDiaSelecionado(0);
+  };
+
+  // Navegacao rapida por decada
+  const irParaDecadaAnterior = () => {
+    const novoAno = Math.max(anoSelecionado - 10, anoAtual - 50);
+    setAnoSelecionado(novoAno);
+    setDiaSelecionado(0);
+  };
+
+  const irParaDecadaSeguinte = () => {
+    const novoAno = Math.min(anoSelecionado + 10, anoAtual);
+    setAnoSelecionado(novoAno);
+    if (novoAno === anoAtual && mesSelecionado > mesAtual) {
+      setMesSelecionado(mesAtual);
+    }
+    setDiaSelecionado(0);
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className={cn(
+            "w-full justify-start text-left font-normal",
+            !date && "text-muted-foreground"
+          )}
+        >
+          <Calendar className="mr-2 h-4 w-4" />
+          {date ? format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : <span>{placeholder}</span>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <div className="p-4 space-y-4">
+          {/* Navegacao rapida por decada */}
+          <div className="flex items-center justify-between">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={irParaDecadaAnterior}
+              disabled={anoSelecionado <= anoAtual - 50}
+              className="h-8 px-2"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              -10 anos
+            </Button>
+            <span className="text-sm font-medium text-muted-foreground">
+              Navegacao rapida
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={irParaDecadaSeguinte}
+              disabled={anoSelecionado >= anoAtual}
+              className="h-8 px-2"
+            >
+              +10 anos
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+
+          {/* Seletores de ano e mes */}
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Label className="text-xs text-muted-foreground mb-1 block">Ano</Label>
+              <Select value={anoSelecionado.toString()} onValueChange={handleAnoChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {anos.map((ano) => (
+                    <SelectItem key={ano} value={ano.toString()}>
+                      {ano}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1">
+              <Label className="text-xs text-muted-foreground mb-1 block">Mes</Label>
+              <Select value={mesSelecionado.toString()} onValueChange={handleMesChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MESES.map((mes, index) => (
+                    <SelectItem
+                      key={index}
+                      value={index.toString()}
+                      disabled={mesDesabilitado(index)}
+                    >
+                      {mes}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Grade de dias */}
+          <div>
+            <Label className="text-xs text-muted-foreground mb-2 block">Dia</Label>
+            <div className="grid grid-cols-7 gap-1">
+              {/* Cabecalho dos dias da semana */}
+              {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((dia, i) => (
+                <div key={i} className="h-8 flex items-center justify-center text-xs font-medium text-muted-foreground">
+                  {dia}
+                </div>
+              ))}
+
+              {/* Espacos vazios para alinhar o primeiro dia */}
+              {Array.from({ length: new Date(anoSelecionado, mesSelecionado, 1).getDay() }).map((_, i) => (
+                <div key={`empty-${i}`} className="h-8" />
+              ))}
+
+              {/* Dias do mes */}
+              {dias.map(({ dia, desabilitado }) => (
+                <Button
+                  key={dia}
+                  variant={diaSelecionado === dia ? "default" : "ghost"}
+                  size="sm"
+                  className={cn(
+                    "h-8 w-8 p-0 font-normal",
+                    diaSelecionado === dia && "bg-primary text-primary-foreground",
+                    desabilitado && "opacity-50 cursor-not-allowed"
+                  )}
+                  onClick={() => handleDiaClick(dia)}
+                  disabled={desabilitado}
+                >
+                  {dia}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export type TipoPunicaoAntiga = 'repreensao' | 'detencao' | 'prisao';
 
@@ -249,30 +485,12 @@ export function LancarPunicaoAntigaModal({
               <p className="text-xs text-muted-foreground mb-2">
                 Data em que a punicao foi aplicada/registrada no sistema DGP.
               </p>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !dataPunicao && "text-muted-foreground"
-                    )}
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {dataPunicao ? format(dataPunicao, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : <span>Selecione a data</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarComponent
-                    mode="single"
-                    selected={dataPunicao}
-                    onSelect={setDataPunicao}
-                    initialFocus
-                    locale={ptBR}
-                    disabled={(date) => date > new Date()}
-                  />
-                </PopoverContent>
-              </Popover>
+              <DatePickerWithYearMonth
+                date={dataPunicao}
+                onDateChange={setDataPunicao}
+                placeholder="Selecione a data"
+                maxDate={new Date()}
+              />
             </div>
 
             {/* Dias de Punicao e Data de Inicio - apenas para detencao e prisao */}
@@ -300,30 +518,12 @@ export function LancarPunicaoAntigaModal({
                   <p className="text-xs text-muted-foreground mb-2">
                     Data em que o militar comecou a cumprir a punicao (opcional).
                   </p>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !dataInicioPunicao && "text-muted-foreground"
-                        )}
-                      >
-                        <Calendar className="mr-2 h-4 w-4" />
-                        {dataInicioPunicao ? format(dataInicioPunicao, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : <span>Selecione a data (opcional)</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <CalendarComponent
-                        mode="single"
-                        selected={dataInicioPunicao}
-                        onSelect={setDataInicioPunicao}
-                        initialFocus
-                        locale={ptBR}
-                        disabled={(date) => date > new Date()}
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <DatePickerWithYearMonth
+                    date={dataInicioPunicao}
+                    onDateChange={setDataInicioPunicao}
+                    placeholder="Selecione a data (opcional)"
+                    maxDate={new Date()}
+                  />
                 </div>
               </>
             )}
