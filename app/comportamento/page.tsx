@@ -52,6 +52,7 @@ export default function ComportamentoPage() {
   // Estados para o modal de lançar punição antiga
   const [isLancarPunicaoModalOpen, setIsLancarPunicaoModalOpen] = useState(false);
   const [isLancandoPunicao, setIsLancandoPunicao] = useState(false);
+  const [loadingDetalhes, setLoadingDetalhes] = useState(false);
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -152,13 +153,17 @@ export default function ComportamentoPage() {
 
   // Obter detalhes do cálculo de comportamento de um militar
   const carregarDetalhesComportamento = async (militarId: string) => {
+    setLoadingDetalhes(true);
     try {
       const detalhes = await ComportamentoService.obterDetalhesCalculo(militarId);
       setComportamentoDetalhes(detalhes);
       return detalhes;
     } catch (error) {
       console.error('Erro ao obter detalhes:', error);
+      setComportamentoDetalhes(null);
       return null;
+    } finally {
+      setLoadingDetalhes(false);
     }
   };
 
@@ -635,14 +640,16 @@ export default function ComportamentoPage() {
                             </CardHeader>
                             <CardContent>
                               <div className="text-2xl font-bold">
-                                {typeof comportamentoDetalhes.detalhes.punicoes8Anos === 'number'
-                                  ? comportamentoDetalhes.detalhes.punicoes8Anos
+                                {typeof comportamentoDetalhes.detalhes?.punicoes8Anos?.total === 'number'
+                                  ? comportamentoDetalhes.detalhes.punicoes8Anos.total
                                   : 'N/A'}
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                {typeof comportamentoDetalhes.detalhes.punicoes8Anos === 'string'
-                                  ? comportamentoDetalhes.detalhes.punicoes8Anos
-                                  : 'punições'}
+                                {typeof comportamentoDetalhes.detalhes?.punicoes8Anos?.total === 'string'
+                                  ? comportamentoDetalhes.detalhes.punicoes8Anos.total
+                                  : typeof comportamentoDetalhes.detalhes?.punicoes8Anos?.unidades === 'number'
+                                    ? `${comportamentoDetalhes.detalhes.punicoes8Anos.unidades} unidades`
+                                    : 'punições'}
                               </p>
                             </CardContent>
                           </Card>
@@ -653,14 +660,16 @@ export default function ComportamentoPage() {
                             </CardHeader>
                             <CardContent>
                               <div className="text-2xl font-bold">
-                                {typeof comportamentoDetalhes.detalhes.punicoes4Anos.total === 'number'
+                                {typeof comportamentoDetalhes.detalhes?.punicoes4Anos?.total === 'number'
                                   ? comportamentoDetalhes.detalhes.punicoes4Anos.total
                                   : 'N/A'}
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                {typeof comportamentoDetalhes.detalhes.punicoes4Anos.total === 'string'
+                                {typeof comportamentoDetalhes.detalhes?.punicoes4Anos?.total === 'string'
                                   ? comportamentoDetalhes.detalhes.punicoes4Anos.total
-                                  : `${comportamentoDetalhes.detalhes.punicoes4Anos.detencoesEquivalentes} det. equiv.`}
+                                  : typeof comportamentoDetalhes.detalhes?.punicoes4Anos?.detencoesEquivalentes === 'number'
+                                    ? `${comportamentoDetalhes.detalhes.punicoes4Anos.detencoesEquivalentes} det. equiv.`
+                                    : 'punições'}
                               </p>
                             </CardContent>
                           </Card>
@@ -671,14 +680,16 @@ export default function ComportamentoPage() {
                             </CardHeader>
                             <CardContent>
                               <div className="text-2xl font-bold">
-                                {typeof comportamentoDetalhes.detalhes.punicoes2Anos.total === 'number'
+                                {typeof comportamentoDetalhes.detalhes?.punicoes2Anos?.total === 'number'
                                   ? comportamentoDetalhes.detalhes.punicoes2Anos.total
                                   : 'N/A'}
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                {typeof comportamentoDetalhes.detalhes.punicoes2Anos.total === 'string'
+                                {typeof comportamentoDetalhes.detalhes?.punicoes2Anos?.total === 'string'
                                   ? comportamentoDetalhes.detalhes.punicoes2Anos.total
-                                  : `${comportamentoDetalhes.detalhes.punicoes2Anos.prisoesEquivalentes} prisões equiv.`}
+                                  : typeof comportamentoDetalhes.detalhes?.punicoes2Anos?.prisoesEquivalentes === 'number'
+                                    ? `${comportamentoDetalhes.detalhes.punicoes2Anos.prisoesEquivalentes} prisões equiv.`
+                                    : 'punições'}
                               </p>
                             </CardContent>
                           </Card>
@@ -689,14 +700,16 @@ export default function ComportamentoPage() {
                             </CardHeader>
                             <CardContent>
                               <div className="text-2xl font-bold">
-                                {typeof comportamentoDetalhes.detalhes.punicoes1Ano.total === 'number'
+                                {typeof comportamentoDetalhes.detalhes?.punicoes1Ano?.total === 'number'
                                   ? comportamentoDetalhes.detalhes.punicoes1Ano.total
                                   : 'N/A'}
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                {typeof comportamentoDetalhes.detalhes.punicoes1Ano.total === 'string'
+                                {typeof comportamentoDetalhes.detalhes?.punicoes1Ano?.total === 'string'
                                   ? comportamentoDetalhes.detalhes.punicoes1Ano.total
-                                  : `${comportamentoDetalhes.detalhes.punicoes1Ano.prisoesEquivalentes} prisões equiv.`}
+                                  : typeof comportamentoDetalhes.detalhes?.punicoes1Ano?.prisoesEquivalentes === 'number'
+                                    ? `${comportamentoDetalhes.detalhes.punicoes1Ano.prisoesEquivalentes} prisões equiv.`
+                                    : 'punições'}
                               </p>
                             </CardContent>
                           </Card>
@@ -704,25 +717,32 @@ export default function ComportamentoPage() {
                       </div>
 
                       {/* Histórico de Punições */}
-                      {comportamentoDetalhes.detalhes.processos.length > 0 && (
+                      {comportamentoDetalhes.detalhes?.pads && comportamentoDetalhes.detalhes.pads.length > 0 && (
                         <div>
                           <h3 className="font-semibold mb-3">Histórico de Punições</h3>
                           <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                            {comportamentoDetalhes.detalhes.processos.map((processo: ProcessoDisciplinar) => (
-                              <Card key={processo.id}>
+                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                            {comportamentoDetalhes.detalhes.pads.map((pad: any) => (
+                              <Card key={pad.id}>
                                 <CardContent className="p-3">
                                   <div className="flex justify-between items-start">
                                     <div>
-                                      <p className="font-medium text-sm">{processo.numero || 'Processo s/n'}</p>
-                                      <p className="text-xs text-muted-foreground">{processo.motivo}</p>
+                                      <p className="font-medium text-sm">
+                                        {pad.militarNome || 'PAD'}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {pad.diasPunicao ? `${pad.diasPunicao} dia(s) de punição` : 'Punição aplicada'}
+                                      </p>
                                       <p className="text-xs mt-1">
-                                        Fechamento: {processo.dataFechamento
-                                          ? new Date(processo.dataFechamento).toLocaleDateString('pt-BR')
-                                          : 'Não informado'}
+                                        Data: {pad.dataInicioPunicao
+                                          ? new Date(pad.dataInicioPunicao).toLocaleDateString('pt-BR')
+                                          : pad.dataConclusao
+                                            ? new Date(pad.dataConclusao).toLocaleDateString('pt-BR')
+                                            : 'Não informado'}
                                       </p>
                                     </div>
                                     <Badge variant="outline" className="text-xs">
-                                      {processo.tipoPunicao}
+                                      {pad.tipoPunicao || 'N/A'}
                                     </Badge>
                                   </div>
                                 </CardContent>
@@ -754,9 +774,17 @@ export default function ComportamentoPage() {
                         </div>
                       </div>
                     </div>
+                  ) : loadingDetalhes ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+                      Carregando detalhes do comportamento...
+                    </div>
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">
-                      Carregando detalhes do comportamento...
+                      <p>Não foi possível carregar os detalhes do comportamento.</p>
+                      <p className="text-sm mt-2">
+                        O militar pode não ser praça ou não ter data de inclusão registrada.
+                      </p>
                     </div>
                   )}
                 </CardContent>
