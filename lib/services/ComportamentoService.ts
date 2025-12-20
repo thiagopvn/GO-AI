@@ -5,10 +5,21 @@
  * baseada nas regras do RDCBMERJ (Regulamento Disciplinar do CBMERJ).
  *
  * IMPORTANTE:
- * - A análise é feita na coleção 'processos' (não em 'transgressoes')
- * - A data de referência é 'dataFechamento' (não 'data' ou 'dataInicioPunicao')
+ * - A análise é feita na coleção 'pads' (documentos de punição)
+ * - A data de referência é 'dataInicioPunicao' (data em que a punição começou a valer)
  * - O cálculo se baseia na QUANTIDADE de punições, NÃO na duração em dias
- * - Apenas processos com status='Finalizado' e decisao='Punição Aplicada' são considerados
+ * - Apenas PADs com status='finalizado' e decisao='punir' são considerados
+ *
+ * Regras de equivalência (Art. 55 RDCBMERJ):
+ * - 2 repreensões = 1 detenção
+ * - 2 detenções = 1 prisão
+ * - 4 repreensões = 1 prisão
+ *
+ * Sistema de unidades inteiras para evitar float:
+ * - Repreensão = 1 unidade
+ * - Detenção = 2 unidades
+ * - Prisão = 4 unidades
+ * - 2 prisões equivalentes = 8 unidades
  */
 
 import {
@@ -23,12 +34,24 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import {
-  ProcessoDisciplinar,
-  TipoPunicao,
   Militar,
   ComportamentoMilitar,
   isPraca
 } from '@/types';
+
+// Interface para PAD com punição (dados da coleção 'pads')
+interface PADPunitivo {
+  id: string;
+  militarId: string;
+  militarNome: string;
+  status: string;
+  decisao: string;
+  tipoPunicao: string;
+  diasPunicao: number;
+  dataInicioPunicao: Date | null;
+  dataAbertura: Date | null;
+  dataConclusao: Date | null;
+}
 
 // Interface para contagem de punições
 interface ContagemPunicoes {
@@ -75,11 +98,11 @@ export class ComportamentoService {
         return null;
       }
 
-      // Passo 2: Buscar TODO o histórico de punições do militar
-      const processosPunitivos = await this.buscarProcessosPunitivos(militarId);
+      // Passo 2: Buscar TODO o histórico de punições do militar (da coleção 'pads')
+      const padsPunitivos = await this.buscarPADsPunitivos(militarId);
 
       // Passo 3 e 4: Calcular o comportamento baseado nas regras e data de inclusão
-      const novoComportamento = this.calcularComportamento(processosPunitivos, militar.dataInclusao);
+      const novoComportamento = this.calcularComportamento(padsPunitivos, militar.dataInclusao);
 
       // Passo 5: Atualizar o documento do militar
       await this.atualizarComportamentoNoFirestore(militarId, novoComportamento);
@@ -94,18 +117,18 @@ export class ComportamentoService {
   }
 
   /**
-   * Busca todos os processos punitivos finalizados de um militar
+   * Busca todos os PADs punitivos finalizados de um militar
    * @param militarId ID do militar
-   * @returns Array de processos disciplinares com punição aplicada
+   * @returns Array de PADs com punição aplicada
    */
-  private static async buscarProcessosPunitivos(
+  private static async buscarPADsPunitivos(
     militarId: string
-  ): Promise<ProcessoDisciplinar[]> {
+  ): Promise<PADPunitivo[]> {
     const q = query(
-      collection(db, 'processos'),
+      collection(db, 'pads'),
       where('militarId', '==', militarId),
-      where('status', '==', 'Finalizado'),
-      where('decisao', '==', 'Punição Aplicada')
+      where('status', '==', 'finalizado'),
+      where('decisao', '==', 'punir')
     );
 
     const snapshot = await getDocs(q);
@@ -114,62 +137,94 @@ export class ComportamentoService {
       const data = docSnapshot.data();
       return {
         id: docSnapshot.id,
-        ...data,
-        // Converter timestamps para Date
-        dataFechamento: data.dataFechamento?.toDate?.() || data.dataFechamento,
-        dataAbertura: data.dataAbertura?.toDate?.() || data.dataAbertura,
-        dataInicioPunicao: data.dataInicioPunicao?.toDate?.() || data.dataInicioPunicao,
-        createdAt: data.createdAt?.toDate?.() || data.createdAt,
-        updatedAt: data.updatedAt?.toDate?.() || data.updatedAt
-      } as ProcessoDisciplinar;
+        militarId: data.militarId,
+        militarNome: data.militarNome,
+        status: data.status,
+        decisao: data.decisao,
+        tipoPunicao: data.tipoPunicao || '',
+        diasPunicao: data.diasPunicao || 0,
+        // Converter timestamps para Date - usar dataInicioPunicao como referência
+        dataInicioPunicao: data.dataInicioPunicao?.toDate?.() || null,
+        dataAbertura: data.dataAbertura?.toDate?.() || null,
+        dataConclusao: data.dataConclusao?.toDate?.() || null
+      } as PADPunitivo;
     });
   }
 
   /**
-   * Filtra processos por janela de tempo baseado na dataFechamento
-   * @param processos Array de processos
+   * Filtra PADs por janela de tempo baseado na dataInicioPunicao
+   * @param pads Array de PADs punitivos
    * @param anos Número de anos para a janela de tempo
-   * @returns Processos dentro da janela de tempo
+   * @param dataReferencia Data de referência (padrão: hoje)
+   * @returns PADs dentro da janela de tempo
    */
   private static filtrarPorJanelaTempo(
-    processos: ProcessoDisciplinar[],
-    anos: number
-  ): ProcessoDisciplinar[] {
-    const hoje = new Date();
-    const dataLimite = new Date();
-    dataLimite.setFullYear(hoje.getFullYear() - anos);
+    pads: PADPunitivo[],
+    anos: number,
+    dataReferencia: Date = new Date()
+  ): PADPunitivo[] {
+    const dataLimite = new Date(dataReferencia);
+    dataLimite.setFullYear(dataLimite.getFullYear() - anos);
 
-    return processos.filter(processo => {
-      if (!processo.dataFechamento) return false;
-      const dataFechamento = new Date(processo.dataFechamento);
-      return dataFechamento >= dataLimite;
+    return pads.filter(pad => {
+      // Usa dataInicioPunicao como referência principal
+      const dataPunicao = pad.dataInicioPunicao || pad.dataConclusao || pad.dataAbertura;
+      if (!dataPunicao) return false;
+      const data = new Date(dataPunicao);
+      // Punição deve estar dentro da janela e não ser futura
+      return data >= dataLimite && data <= dataReferencia;
     });
   }
 
   /**
-   * Conta as punições por tipo em uma lista de processos
-   * @param processos Array de processos
+   * Conta as punições por tipo em uma lista de PADs
+   * IMPORTANTE: Cada PAD conta como 1 punição, independente dos dias
+   * @param pads Array de PADs punitivos
    * @returns Contagem de punições por tipo
    */
-  private static contarPunicoes(processos: ProcessoDisciplinar[]): ContagemPunicoes {
+  private static contarPunicoes(pads: PADPunitivo[]): ContagemPunicoes {
     const contagem: ContagemPunicoes = {
       repreensoes: 0,
       detencoes: 0,
       prisoes: 0
     };
 
-    processos.forEach(processo => {
-      const tipoPunicao = String(processo.tipoPunicao || '').toLowerCase();
-      if (tipoPunicao === 'repreensão' || tipoPunicao === 'repreensao' || tipoPunicao === TipoPunicao.REPREENSAO.toLowerCase()) {
+    pads.forEach(pad => {
+      // Cada PAD conta como 1 punição, independente da quantidade de dias
+      const tipoPunicao = String(pad.tipoPunicao || '').toLowerCase();
+      if (tipoPunicao === 'repreensão' || tipoPunicao === 'repreensao') {
         contagem.repreensoes++;
-      } else if (tipoPunicao === 'detenção' || tipoPunicao === 'detencao' || tipoPunicao === TipoPunicao.DETENCAO.toLowerCase()) {
+      } else if (tipoPunicao === 'detenção' || tipoPunicao === 'detencao') {
         contagem.detencoes++;
-      } else if (tipoPunicao === 'prisão' || tipoPunicao === 'prisao' || tipoPunicao === TipoPunicao.PRISAO.toLowerCase()) {
+      } else if (tipoPunicao === 'prisão' || tipoPunicao === 'prisao') {
         contagem.prisoes++;
       }
     });
 
     return contagem;
+  }
+
+  /**
+   * Calcula o total de unidades de uma lista de PADs
+   * Sistema de unidades inteiras para evitar problemas com float:
+   * - Repreensão = 1 unidade
+   * - Detenção = 2 unidades
+   * - Prisão = 4 unidades
+   * @param pads Array de PADs punitivos
+   * @returns Total de unidades
+   */
+  private static calcularUnidades(pads: PADPunitivo[]): number {
+    return pads.reduce((acc, pad) => {
+      const tipoPunicao = String(pad.tipoPunicao || '').toLowerCase();
+      if (tipoPunicao === 'repreensão' || tipoPunicao === 'repreensao') {
+        return acc + 1; // Repreensão = 1 unidade
+      } else if (tipoPunicao === 'detenção' || tipoPunicao === 'detencao') {
+        return acc + 2; // Detenção = 2 unidades
+      } else if (tipoPunicao === 'prisão' || tipoPunicao === 'prisao') {
+        return acc + 4; // Prisão = 4 unidades
+      }
+      return acc;
+    }, 0);
   }
 
   /**
@@ -201,78 +256,96 @@ export class ComportamentoService {
 
   /**
    * Calcula o comportamento baseado nas regras do RDCBMERJ
-   * @param processos Array completo de processos punitivos do militar
+   *
+   * REGRAS (decisão em árvore com prioridade):
+   *
+   * (A) EXCEPCIONAL - Janela: 8 anos - Condição: 0 punições
+   * (B) MAU - Janela: 1 ano - Condição: > 8 unidades (mais de 2 prisões equivalentes)
+   * (C) INSUFICIENTE - Janela: 1 ano - Condição: == 8 unidades (exatamente 2 prisões equivalentes)
+   * (D) ÓTIMO - Janela: 4 anos - Condição: <= 2 unidades (no máximo 1 detenção equivalente)
+   * (E) BOM - Janela: 2 anos - Condição: <= 8 unidades (no máximo 2 prisões equivalentes)
+   * (F) Fallback: MAU (quando excede o limite do BOM em 2 anos)
+   *
+   * Sistema de unidades:
+   * - Repreensão = 1 unidade
+   * - Detenção = 2 unidades
+   * - Prisão = 4 unidades
+   * - 2 prisões equivalentes = 8 unidades
+   * - 1 detenção equivalente = 2 unidades
+   *
+   * @param pads Array completo de PADs punitivos do militar
    * @param dataInclusao Data de inclusão do militar no serviço
    * @returns Classificação de comportamento
    */
   private static calcularComportamento(
-    processos: ProcessoDisciplinar[],
+    pads: PADPunitivo[],
     dataInclusao: Date
   ): ComportamentoMilitar {
-    // Calcular tempo de serviço em anos
     const hoje = new Date();
     const dataInclusaoDate = new Date(dataInclusao);
     const tempoServicoAnos = (hoje.getTime() - dataInclusaoDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
 
-    // Regra 1: EXCEPCIONAL - 8 anos sem punições (apenas se tem 8+ anos de serviço)
+    // ========================================
+    // (A) EXCEPCIONAL: 0 punições nos últimos 8 anos
+    // ========================================
     if (tempoServicoAnos >= 8) {
-      const punicoes8Anos = this.filtrarPorJanelaTempo(processos, 8);
-      if (punicoes8Anos.length === 0) {
+      const pads8Anos = this.filtrarPorJanelaTempo(pads, 8, hoje);
+      const unidades8Anos = this.calcularUnidades(pads8Anos);
+      if (unidades8Anos === 0) {
         return ComportamentoMilitar.EXCEPCIONAL;
       }
     }
 
-    // Regra 2: ÓTIMO - 4 anos com no máximo 1 detenção equivalente (apenas se tem 4+ anos de serviço)
-    if (tempoServicoAnos >= 4) {
-      const punicoes4Anos = this.filtrarPorJanelaTempo(processos, 4);
-      const contagem4Anos = this.contarPunicoes(punicoes4Anos);
-      const detencoesEquivalentes4Anos = this.converterEmDetencoesEquivalentes(contagem4Anos);
+    // ========================================
+    // (B) e (C) Avaliar último ano PRIMEIRO - tem prioridade
+    // MAU: > 8 unidades (mais de 2 prisões equivalentes)
+    // INSUFICIENTE: == 8 unidades (exatamente 2 prisões equivalentes)
+    // ========================================
+    const pads1Ano = tempoServicoAnos >= 1
+      ? this.filtrarPorJanelaTempo(pads, 1, hoje)
+      : pads; // Se tem menos de 1 ano, considerar todas as punições
 
-      if (detencoesEquivalentes4Anos <= 1) {
+    const unidades1Ano = this.calcularUnidades(pads1Ano);
+
+    // Mais de 2 prisões equivalentes (> 8 unidades) -> MAU
+    if (unidades1Ano > 8) {
+      return ComportamentoMilitar.MAU;
+    }
+
+    // Exatamente 2 prisões equivalentes (== 8 unidades) -> INSUFICIENTE
+    if (unidades1Ano === 8) {
+      return ComportamentoMilitar.INSUFICIENTE;
+    }
+
+    // ========================================
+    // (D) ÓTIMO: Últimos 4 anos com no máximo 1 detenção equivalente (<= 2 unidades)
+    // ========================================
+    if (tempoServicoAnos >= 4) {
+      const pads4Anos = this.filtrarPorJanelaTempo(pads, 4, hoje);
+      const unidades4Anos = this.calcularUnidades(pads4Anos);
+      if (unidades4Anos <= 2) {
         return ComportamentoMilitar.OTIMO;
       }
     }
 
-    // Avaliar punições no último ano (SEMPRE - para detectar quedas)
-    const punicoesUltimoAno = tempoServicoAnos >= 1
-      ? this.filtrarPorJanelaTempo(processos, 1)
-      : processos; // Se tem menos de 1 ano, avaliar todas as punições desde a inclusão
+    // ========================================
+    // (E) BOM: Últimos 2 anos com no máximo 2 prisões equivalentes (<= 8 unidades)
+    // ========================================
+    const pads2Anos = tempoServicoAnos >= 2
+      ? this.filtrarPorJanelaTempo(pads, 2, hoje)
+      : pads; // Se tem menos de 2 anos, considerar todas as punições
 
-    const contagemUltimoAno = this.contarPunicoes(punicoesUltimoAno);
-    const prisoesEquivalentesUltimoAno = this.converterEmPrisoesEquivalentes(contagemUltimoAno);
+    const unidades2Anos = this.calcularUnidades(pads2Anos);
 
-    // Regra de queda no último ano: Mais de 2 prisões equivalentes -> MAU
-    if (prisoesEquivalentesUltimoAno > 2) {
-      return ComportamentoMilitar.MAU;
-    }
-
-    // Regra de queda no último ano: Exatamente 2 prisões equivalentes -> INSUFICIENTE
-    if (prisoesEquivalentesUltimoAno === 2) {
-      return ComportamentoMilitar.INSUFICIENTE;
-    }
-
-    // Regra 3: Avaliar últimos 2 anos (se tem 2+ anos de serviço)
-    if (tempoServicoAnos >= 2) {
-      const punicoes2Anos = this.filtrarPorJanelaTempo(processos, 2);
-      const contagem2Anos = this.contarPunicoes(punicoes2Anos);
-      const prisoesEquivalentes2Anos = this.converterEmPrisoesEquivalentes(contagem2Anos);
-
-      // Regra de queda nos últimos 2 anos: Mais de 2 prisões equivalentes -> MAU
-      if (prisoesEquivalentes2Anos > 2) {
-        return ComportamentoMilitar.MAU;
-      }
-
-      // Regra de queda nos últimos 2 anos: Exatamente 2 prisões equivalentes -> INSUFICIENTE
-      if (prisoesEquivalentes2Anos === 2) {
-        return ComportamentoMilitar.INSUFICIENTE;
-      }
-
-      // Menos de 2 prisões equivalentes em 2 anos -> BOM
+    if (unidades2Anos <= 8) {
       return ComportamentoMilitar.BOM;
     }
 
-    // Comportamento padrão: BOM (todos iniciam no BOM, menos de 2 prisões equiv.)
-    return ComportamentoMilitar.BOM;
+    // ========================================
+    // (F) Fallback: MAU (quando excede o limite do BOM em 2 anos)
+    // Ex: 2 prisões + 1 repreensão = 8 + 1 = 9 unidades -> MAU
+    // ========================================
+    return ComportamentoMilitar.MAU;
   }
 
   /**
@@ -358,6 +431,8 @@ export class ComportamentoService {
 
   /**
    * Método auxiliar para debug: mostra o cálculo detalhado
+   * Sistema de unidades: Repreensão=1, Detenção=2, Prisão=4
+   * 2 prisões equivalentes = 8 unidades
    * @param militarId ID do militar
    * @returns Objeto com detalhes do cálculo
    */
@@ -370,11 +445,11 @@ export class ComportamentoService {
       tempoServicoAnos: number;
     };
     detalhes: {
-      punicoes8Anos: number | string;
-      punicoes4Anos: { total: number | string; detencoesEquivalentes: number | string };
-      punicoes2Anos: { total: number | string; prisoesEquivalentes: number | string };
-      punicoes1Ano: { total: number | string; prisoesEquivalentes: number | string };
-      processos: ProcessoDisciplinar[];
+      punicoes8Anos: { total: number | string; unidades: number | string };
+      punicoes4Anos: { total: number | string; unidades: number | string; detencoesEquivalentes: number | string };
+      punicoes2Anos: { total: number | string; unidades: number | string; prisoesEquivalentes: number | string };
+      punicoes1Ano: { total: number | string; unidades: number | string; prisoesEquivalentes: number | string };
+      pads: PADPunitivo[];
     };
   } | null> {
     try {
@@ -397,58 +472,71 @@ export class ComportamentoService {
       const dataInclusaoDate = new Date(militar.dataInclusao);
       const tempoServicoAnos = (hoje.getTime() - dataInclusaoDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
 
-      // Buscar processos
-      const processos = await this.buscarProcessosPunitivos(militarId);
+      // Buscar PADs punitivos
+      const pads = await this.buscarPADsPunitivos(militarId);
 
       // Calcular detalhes para cada janela (respeitando tempo de serviço)
-      let detalhes8Anos: number | string = "N/A - menos de 8 anos de serviço";
-      let detalhes4Anos: { total: number | string; detencoesEquivalentes: number | string } = {
+      let detalhes8Anos: { total: number | string; unidades: number | string } = {
+        total: "N/A - menos de 8 anos de serviço",
+        unidades: "N/A"
+      };
+      let detalhes4Anos: { total: number | string; unidades: number | string; detencoesEquivalentes: number | string } = {
         total: "N/A - menos de 4 anos de serviço",
+        unidades: "N/A",
         detencoesEquivalentes: "N/A"
       };
-      let detalhes2Anos: { total: number | string; prisoesEquivalentes: number | string } = {
+      let detalhes2Anos: { total: number | string; unidades: number | string; prisoesEquivalentes: number | string } = {
         total: "N/A - menos de 2 anos de serviço",
+        unidades: "N/A",
         prisoesEquivalentes: "N/A"
       };
-      let detalhes1Ano: { total: number | string; prisoesEquivalentes: number | string } = {
+      let detalhes1Ano: { total: number | string; unidades: number | string; prisoesEquivalentes: number | string } = {
         total: "N/A - menos de 1 ano de serviço",
+        unidades: "N/A",
         prisoesEquivalentes: "N/A"
       };
 
       // Calcular apenas para janelas aplicáveis baseado no tempo de serviço
       if (tempoServicoAnos >= 8) {
-        const punicoes8Anos = this.filtrarPorJanelaTempo(processos, 8);
-        detalhes8Anos = punicoes8Anos.length;
+        const pads8Anos = this.filtrarPorJanelaTempo(pads, 8, hoje);
+        const unidades8Anos = this.calcularUnidades(pads8Anos);
+        detalhes8Anos = {
+          total: pads8Anos.length,
+          unidades: unidades8Anos
+        };
       }
 
       if (tempoServicoAnos >= 4) {
-        const punicoes4Anos = this.filtrarPorJanelaTempo(processos, 4);
-        const contagem4Anos = this.contarPunicoes(punicoes4Anos);
+        const pads4Anos = this.filtrarPorJanelaTempo(pads, 4, hoje);
+        const unidades4Anos = this.calcularUnidades(pads4Anos);
         detalhes4Anos = {
-          total: punicoes4Anos.length,
-          detencoesEquivalentes: this.converterEmDetencoesEquivalentes(contagem4Anos)
+          total: pads4Anos.length,
+          unidades: unidades4Anos,
+          detencoesEquivalentes: unidades4Anos / 2 // 1 detenção = 2 unidades
         };
       }
 
       if (tempoServicoAnos >= 2) {
-        const punicoes2Anos = this.filtrarPorJanelaTempo(processos, 2);
-        const contagem2Anos = this.contarPunicoes(punicoes2Anos);
+        const pads2Anos = this.filtrarPorJanelaTempo(pads, 2, hoje);
+        const unidades2Anos = this.calcularUnidades(pads2Anos);
         detalhes2Anos = {
-          total: punicoes2Anos.length,
-          prisoesEquivalentes: this.converterEmPrisoesEquivalentes(contagem2Anos)
+          total: pads2Anos.length,
+          unidades: unidades2Anos,
+          prisoesEquivalentes: unidades2Anos / 4 // 1 prisão = 4 unidades
         };
       }
 
       if (tempoServicoAnos >= 1) {
-        const punicoes1Ano = this.filtrarPorJanelaTempo(processos, 1);
-        const contagem1Ano = this.contarPunicoes(punicoes1Ano);
+        const pads1Ano = this.filtrarPorJanelaTempo(pads, 1, hoje);
+        const unidades1Ano = this.calcularUnidades(pads1Ano);
         detalhes1Ano = {
-          total: punicoes1Ano.length,
-          prisoesEquivalentes: this.converterEmPrisoesEquivalentes(contagem1Ano)
+          total: pads1Ano.length,
+          unidades: unidades1Ano,
+          prisoesEquivalentes: unidades1Ano / 4 // 1 prisão = 4 unidades
         };
       }
 
-      const comportamentoCalculado = this.calcularComportamento(processos, militar.dataInclusao);
+      const comportamentoCalculado = this.calcularComportamento(pads, militar.dataInclusao);
 
       return {
         comportamentoCalculado,
@@ -463,9 +551,9 @@ export class ComportamentoService {
           punicoes4Anos: detalhes4Anos,
           punicoes2Anos: detalhes2Anos,
           punicoes1Ano: detalhes1Ano,
-          processos: processos.sort((a, b) => {
-            const dateA = a.dataFechamento ? new Date(a.dataFechamento).getTime() : 0;
-            const dateB = b.dataFechamento ? new Date(b.dataFechamento).getTime() : 0;
+          pads: pads.sort((a, b) => {
+            const dateA = a.dataInicioPunicao ? new Date(a.dataInicioPunicao).getTime() : 0;
+            const dateB = b.dataInicioPunicao ? new Date(b.dataInicioPunicao).getTime() : 0;
             return dateB - dateA; // Ordem decrescente (mais recente primeiro)
           })
         }
