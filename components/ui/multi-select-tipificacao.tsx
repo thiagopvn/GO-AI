@@ -181,18 +181,6 @@ export function MultiSelectTipificacao({
                           <span className="text-sm">
                             {item.text}
                           </span>
-                          {searchValue && item.keywords.length > 0 && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {item.keywords.slice(0, 4).map((keyword, idx) => (
-                                <span
-                                  key={idx}
-                                  className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded"
-                                >
-                                  {keyword}
-                                </span>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       </CommandItem>
                     )
