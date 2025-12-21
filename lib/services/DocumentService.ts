@@ -9,7 +9,8 @@ import {
   WidthType,
   Packer,
   ShadingType,
-  HeadingLevel
+  HeadingLevel,
+  ImageRun
 } from 'docx';
 import { ConclusaoPadData } from '@/components/modals/ConcluirPadModal';
 import { format } from 'date-fns';
@@ -51,7 +52,26 @@ const AGRAVANTES_DOC = [
 export class DocumentService {
   async gerarDespacho(dados: DadosDespacho): Promise<Blob> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { conclusao, militarNome, militarPosto, processoNumero: _processoNumero, comandanteNome, comandantePosto, comandanteRG, comandanteFuncao } = dados;
+    const { conclusao, militarNome, militarPosto, processoNumero: _processoNumero, comandanteNome: _comandanteNome, comandantePosto: _comandantePosto, comandanteRG: _comandanteRG, comandanteFuncao: _comandanteFuncao } = dados;
+
+    // Carregar a logo do GOCG (PNG)
+    let logoImageRun: ImageRun | null = null;
+    try {
+      const response = await fetch('/logo-gocg.png');
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        logoImageRun = new ImageRun({
+          data: arrayBuffer,
+          transformation: {
+            width: 60,
+            height: 60,
+          },
+          type: 'png',
+        });
+      }
+    } catch (error) {
+      console.warn('Logo do GOCG não encontrado, documento será gerado sem logo');
+    }
 
     const doc = new Document({
       sections: [{
@@ -175,7 +195,7 @@ export class DocumentService {
           ...(conclusao.decisao === 'punir' ? this.gerarSecaoPunicao(conclusao, militarNome, militarPosto) : []),
 
           // Assinatura
-          ...this.gerarAssinatura(comandanteNome, comandantePosto, comandanteRG, comandanteFuncao),
+          ...this.gerarAssinatura(logoImageRun),
         ],
       }],
     });
@@ -487,23 +507,33 @@ export class DocumentService {
     return paragraphs;
   }
 
-  private gerarAssinatura(nome: string, posto: string, rg: string, funcao: string): Paragraph[] {
-    return [
+  private gerarAssinatura(logoImageRun: ImageRun | null): Paragraph[] {
+    const paragraphs: Paragraph[] = [
       new Paragraph({
         children: [
           new TextRun({
-            text: `${nome} - ${posto} BM QOC/02`,
+            text: "________________________________",
+            size: 22,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 300, after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "Leandro Veríssimo de Oliveira Araujo - Maj. BM QOC/03",
             bold: true,
             size: 22,
           }),
         ],
         alignment: AlignmentType.CENTER,
-        spacing: { before: 300, after: 50 },
+        spacing: { after: 50 },
       }),
       new Paragraph({
         children: [
           new TextRun({
-            text: `RG CBMERJ ${rg} | Id funcional ${rg}`,
+            text: "RG CBMERJ 34038 | Id funcional 4149275-7",
             size: 20,
           }),
         ],
@@ -513,13 +543,26 @@ export class DocumentService {
       new Paragraph({
         children: [
           new TextRun({
-            text: funcao,
+            text: "Subcomandante Administrativo do GOCG",
             size: 20,
           }),
         ],
         alignment: AlignmentType.CENTER,
+        spacing: { after: 400 },
       }),
     ];
+
+    // Adicionar logo do GOCG se disponível
+    if (logoImageRun) {
+      paragraphs.push(
+        new Paragraph({
+          children: [logoImageRun],
+          alignment: AlignmentType.CENTER,
+        })
+      );
+    }
+
+    return paragraphs;
   }
 
   // Método auxiliar para converter o Blob em base64 para upload no Firebase
