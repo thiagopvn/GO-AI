@@ -219,15 +219,20 @@ export class PADNovoService {
     // Preparar texto da peça acusatória
     const militarTextoCurto = buildMilitarTextoCurto(militar);
 
-    // Tentar carregar o logo do GOCG
+    // Carregar a logo do GOCG (PNG)
     let logoImageRun: ImageRun | null = null;
     try {
-      // Carregar o logo via fetch (funciona no browser)
-      const response = await fetch('/LOGO GOCG.svg');
+      const response = await fetch('/logo-gocg.png');
       if (response.ok) {
-        const svgText = await response.text();
-        // Nota: docx não suporta SVG diretamente, precisaríamos converter para PNG
-        // Por ora, vamos pular a imagem e adicionar um placeholder de texto
+        const arrayBuffer = await response.arrayBuffer();
+        logoImageRun = new ImageRun({
+          data: arrayBuffer,
+          transformation: {
+            width: 60,
+            height: 60,
+          },
+          type: 'png',
+        });
       }
     } catch (error) {
       console.warn('Logo do GOCG não encontrado, documento será gerado sem logo');
@@ -246,6 +251,15 @@ export class PADNovoService {
           },
         },
         children: [
+          // Logo do GOCG (se disponível)
+          ...(logoImageRun ? [
+            new Paragraph({
+              children: [logoImageRun],
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 200 }
+            }),
+          ] : []),
+
           // Cabeçalho
           new Paragraph({
             children: [
@@ -293,19 +307,6 @@ export class PADNovoService {
               }),
             ],
             alignment: AlignmentType.CENTER,
-            spacing: { after: 200 }
-          }),
-
-          // 1ª VIA
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "1a VIA",
-                bold: true,
-                size: 22,
-              }),
-            ],
-            alignment: AlignmentType.RIGHT,
             spacing: { after: 400 }
           }),
 
@@ -341,9 +342,6 @@ export class PADNovoService {
             }),
           ]),
 
-          // Espaçamento
-          new Paragraph({ text: "", spacing: { after: 200 } }),
-
           // Seção PEÇA ACUSATÓRIA - Texto conforme especificação
           createBorderedSection("PECA ACUSATORIA", [
             new Paragraph({
@@ -371,14 +369,8 @@ export class PADNovoService {
             }),
           ]),
 
-          // Espaçamento
-          new Paragraph({ text: "", spacing: { after: 200 } }),
-
           // Seção TIPIFICAÇÃO - Com múltiplos itens
           createBorderedSection("TIPIFICACAO", gerarParagrafosTipificacao(dadosAcusacao.itensTipificacao)),
-
-          // Espaçamento
-          new Paragraph({ text: "", spacing: { after: 200 } }),
 
           // Seção PRAZO PARA EXPOSIÇÃO DAS RAZÕES ESCRITAS DE DEFESA
           createBorderedSection("PRAZO PARA EXPOSICAO DAS RAZOES ESCRITAS DE DEFESA", [
@@ -388,57 +380,8 @@ export class PADNovoService {
             }),
           ]),
 
-          // Espaçamento grande antes da assinatura
-          new Paragraph({ text: "", spacing: { after: 600 } }),
-
-          // Bloco de Assinatura
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "________________________________",
-                size: 22,
-              }),
-            ],
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 100 }
-          }),
-
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "Leandro Verissimo de Oliveira Araujo - Maj. BM QOC/03",
-                size: 22,
-                bold: true,
-              }),
-            ],
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 50 }
-          }),
-
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "RG CBMERJ 34038 | Id funcional 4149275-7",
-                size: 20,
-              }),
-            ],
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 50 }
-          }),
-
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "Subcomandante Administrativo do GOCG",
-                size: 20,
-              }),
-            ],
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 400 }
-          }),
-
           // Espaçamento antes do bloco de recebimento
-          new Paragraph({ text: "", spacing: { after: 400 } }),
+          new Paragraph({ text: "", spacing: { after: 600 } }),
 
           // Bloco de Recebimento
           new Table({
@@ -506,15 +449,48 @@ export class PADNovoService {
             ],
           }),
 
-          // Texto do logo como placeholder
-          new Paragraph({ text: "", spacing: { after: 300 } }),
+          // Espaçamento antes da assinatura do Major
+          new Paragraph({ text: "", spacing: { after: 600 } }),
+
+          // Bloco de Assinatura do Major (após recebi o original)
           new Paragraph({
             children: [
               new TextRun({
-                text: "[LOGO GOCG]",
-                size: 18,
-                color: "888888",
-                italics: true,
+                text: "________________________________",
+                size: 22,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 100 }
+          }),
+
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Leandro Verissimo de Oliveira Araujo - Maj. BM QOC/03",
+                size: 22,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 50 }
+          }),
+
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "RG CBMERJ 34038 | Id funcional 4149275-7",
+                size: 20,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 50 }
+          }),
+
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Subcomandante Administrativo do GOCG",
+                size: 20,
               }),
             ],
             alignment: AlignmentType.CENTER,
