@@ -44,14 +44,14 @@ export function useRealtimeStats() {
         // Buscar sindicâncias em andamento
         const sindicEmAndamentoQuery = query(
           collection(db, 'sindicancias'),
-          where('status', '==', 'em_andamento')
+          where('status', '==', 'Em Andamento')
         );
         const sindicEmAndamentoSnap = await getCountFromServer(sindicEmAndamentoQuery);
 
         // Buscar sindicâncias finalizadas
         const sindicFinalizadasQuery = query(
           collection(db, 'sindicancias'),
-          where('status', '==', 'finalizada')
+          where('status', '==', 'Concluída')
         );
         const sindicFinalizadasSnap = await getCountFromServer(sindicFinalizadasQuery);
 
@@ -119,9 +119,9 @@ export function useRealtimeStats() {
 
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        if (data.status === 'em_andamento') {
+        if (data.status === 'Em Andamento') {
           emAndamento++;
-        } else if (data.status === 'finalizada') {
+        } else if (data.status === 'Concluída') {
           finalizadas++;
         }
       });

@@ -114,34 +114,66 @@ export default function Home() {
         case 'sindicanciasFinalizadas': {
           const q = query(
             collection(db, 'sindicancias'),
-            where('status', '==', 'finalizada'),
-            orderBy('dataInstauracao', 'desc'),
+            where('status', '==', 'Concluída'),
             limit(50)
           );
           const snapshot = await getDocs(q);
-          const sindicancias = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            dataInstauracao: doc.data().dataInstauracao?.toDate(),
-            dataLimite: doc.data().dataLimite?.toDate()
-          } as Sindicancia));
+          const sindicancias = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              numero: data.numero || '',
+              tipo: data.tipo || 'Sindicância',
+              encarregadoId: data.encarregadoId || '',
+              encarregadoNome: data.encarregadoNome || '',
+              encarregadoPosto: data.encarregadoPosto || '',
+              militarInvestigadoId: data.militarInvestigadoId || '',
+              militarInvestigadoNome: data.militarInvestigadoNome || '',
+              assunto: data.assunto || data.militarInvestigadoNome || 'N/A',
+              dataInstauracao: data.dataInstauracao?.toDate?.() || data.createdAt?.toDate?.() || new Date(),
+              prazoInicial: data.prazoInicial || 20,
+              prorrogacoes: data.prorrogacoes || 0,
+              dataLimite: data.dataLimite?.toDate?.() || new Date(),
+              status: data.status,
+              observacoes: data.observacoes || '',
+              createdAt: data.createdAt?.toDate?.() || new Date(),
+              updatedAt: data.updatedAt?.toDate?.() || new Date(),
+              createdBy: data.createdBy || ''
+            } as Sindicancia;
+          });
           setModalData(prev => ({ ...prev, sindicancias }));
           break;
         }
         case 'sindicanciasEmAndamento': {
           const q = query(
             collection(db, 'sindicancias'),
-            where('status', '==', 'em_andamento'),
-            orderBy('dataInstauracao', 'desc'),
+            where('status', '==', 'Em Andamento'),
             limit(50)
           );
           const snapshot = await getDocs(q);
-          const sindicancias = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            dataInstauracao: doc.data().dataInstauracao?.toDate(),
-            dataLimite: doc.data().dataLimite?.toDate()
-          } as Sindicancia));
+          const sindicancias = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              numero: data.numero || '',
+              tipo: data.tipo || 'Sindicância',
+              encarregadoId: data.encarregadoId || '',
+              encarregadoNome: data.encarregadoNome || '',
+              encarregadoPosto: data.encarregadoPosto || '',
+              militarInvestigadoId: data.militarInvestigadoId || '',
+              militarInvestigadoNome: data.militarInvestigadoNome || '',
+              assunto: data.assunto || data.militarInvestigadoNome || 'N/A',
+              dataInstauracao: data.dataInstauracao?.toDate?.() || data.createdAt?.toDate?.() || new Date(),
+              prazoInicial: data.prazoInicial || 20,
+              prorrogacoes: data.prorrogacoes || 0,
+              dataLimite: data.dataLimite?.toDate?.() || new Date(),
+              status: data.status,
+              observacoes: data.observacoes || '',
+              createdAt: data.createdAt?.toDate?.() || new Date(),
+              updatedAt: data.updatedAt?.toDate?.() || new Date(),
+              createdBy: data.createdBy || ''
+            } as Sindicancia;
+          });
           setModalData(prev => ({ ...prev, sindicancias }));
           break;
         }
@@ -403,18 +435,27 @@ export default function Home() {
               <div key={sind.id} className="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="font-medium">{sind.numero}</span>
                       <Badge variant={sind.status === 'Concluída' ? 'default' : 'secondary'}>
-                        {sind.tipo}
+                        {sind.status}
                       </Badge>
+                      {sind.prorrogacoes > 0 && (
+                        <Badge variant="outline" className="text-xs">
+                          {sind.prorrogacoes} prorrog.
+                        </Badge>
+                      )}
                     </div>
-                    <p className="text-sm text-gray-600">{sind.assunto}</p>
+                    {sind.militarInvestigadoNome && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Investigado:</span> {sind.militarInvestigadoNome}
+                      </p>
+                    )}
                     <p className="text-xs text-gray-500 mt-1">
-                      Encarregado: {sind.encarregadoPosto} {sind.encarregadoNome}
+                      <span className="font-medium">Encarregado:</span> {sind.encarregadoPosto} {sind.encarregadoNome}
                     </p>
-                    <p className="text-xs text-gray-400">
-                      {sind.dataInstauracao && format(sind.dataInstauracao, "dd/MM/yyyy", { locale: ptBR })}
+                    <p className="text-xs text-gray-400 mt-1">
+                      Prazo inicial: {sind.prazoInicial} dias
                     </p>
                   </div>
                   <Link href={`/sindicancias`}>
