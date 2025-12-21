@@ -446,8 +446,13 @@ export default function Home() {
                         </Badge>
                       )}
                     </div>
+                    {sind.assunto && (
+                      <p className="text-sm text-gray-700 mt-1">
+                        <span className="font-medium">Assunto:</span> {sind.assunto}
+                      </p>
+                    )}
                     {sind.militarInvestigadoNome && (
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-gray-600 mt-1">
                         <span className="font-medium">Investigado:</span> {sind.militarInvestigadoNome}
                       </p>
                     )}
