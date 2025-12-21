@@ -1934,15 +1934,24 @@ function calcularScoreRelevancia(item: ItemTipificacaoEnriquecido, termos: strin
   for (const termo of termos) {
     const termoLower = termo.toLowerCase();
 
+    // Pular termos muito curtos
+    if (termoLower.length < 2) continue;
+
     // Correspondência exata no texto = maior pontuação
     if (textLower.includes(termoLower)) {
-      score += 10;
+      score += 15;
     }
 
-    // Correspondência exata em keyword = boa pontuação
+    // Correspondência exata em keyword
     for (const keyword of keywordsLower) {
+      // Correspondência exata
+      if (keyword === termoLower) {
+        score += 20;
+        break;
+      }
+      // Keyword contém o termo ou termo contém keyword
       if (keyword.includes(termoLower) || termoLower.includes(keyword)) {
-        score += 8;
+        score += 10;
         break;
       }
     }
@@ -1977,11 +1986,11 @@ export function buscarItensInteligente(texto: string): ItemTipificacaoEnriquecid
   }
 
   // Extrair termos de busca (remover palavras comuns e números)
-  const palavrasComuns = ['o', 'a', 'os', 'as', 'de', 'da', 'do', 'das', 'dos', 'e', 'ou', 'para', 'com', 'em', 'um', 'uma', 'que', 'no', 'na', 'nos', 'nas', 'por', 'ao', 'se', 'seu', 'sua', 'item', 'artigo', 'inciso', 'número', 'numero', 'nº', 'n'];
+  const palavrasComuns = ['o', 'a', 'os', 'as', 'de', 'da', 'do', 'das', 'dos', 'e', 'ou', 'para', 'com', 'em', 'um', 'uma', 'que', 'no', 'na', 'nos', 'nas', 'por', 'ao', 'se', 'seu', 'sua', 'item', 'artigo', 'inciso', 'número', 'numero', 'nº', 'n', 'era', 'foi', 'ser', 'ter', 'quando', 'como', 'mais', 'muito', 'bem', 'mal', 'ele', 'ela'];
   const termos = texto
     .toLowerCase()
     .split(/\s+/)
-    .filter(t => t.length > 2 && !palavrasComuns.includes(t) && !/^\d+$/.test(t));
+    .filter(t => t.length >= 2 && !palavrasComuns.includes(t) && !/^\d+$/.test(t));
 
   // Se só temos números, retornar os itens correspondentes
   if (termos.length === 0 && numerosEncontrados.length > 0) {
