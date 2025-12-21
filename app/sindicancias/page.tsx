@@ -52,7 +52,7 @@ export default function SindicanciasPage() {
     numero: '',
     tipo: 'Sindicância' as Sindicancia['tipo'],
     encarregadoId: '',
-    militarInvestigadoId: '',
+    militarInvestigadoId: 'none',
     assunto: '',
     dataInstauracao: format(new Date(), 'yyyy-MM-dd'),
     prazoInicial: 30,
@@ -142,7 +142,8 @@ export default function SindicanciasPage() {
       const dataInstauracao = new Date(formData.dataInstauracao);
       const dataLimite = addDays(dataInstauracao, formData.prazoInicial);
 
-      const militarInvestigado = formData.militarInvestigadoId && formData.militarInvestigadoId !== 'none'
+      const hasMilitarInvestigado = formData.militarInvestigadoId !== 'none';
+      const militarInvestigado = hasMilitarInvestigado
         ? militares.find(m => m.id === formData.militarInvestigadoId)
         : null;
 
@@ -152,7 +153,7 @@ export default function SindicanciasPage() {
         encarregadoId: formData.encarregadoId,
         encarregadoNome: oficial.nomeCompleto || oficial.nome,
         encarregadoPosto: oficial.postoGraduacao || oficial.patente || '',
-        militarInvestigadoId: formData.militarInvestigadoId && formData.militarInvestigadoId !== 'none' ? formData.militarInvestigadoId : undefined,
+        militarInvestigadoId: hasMilitarInvestigado ? formData.militarInvestigadoId : undefined,
         militarInvestigadoNome: militarInvestigado?.nomeCompleto || militarInvestigado?.nome,
         assunto: formData.assunto,
         dataInstauracao,
@@ -251,7 +252,7 @@ export default function SindicanciasPage() {
       numero: '',
       tipo: 'Sindicância',
       encarregadoId: '',
-      militarInvestigadoId: '',
+      militarInvestigadoId: 'none',
       assunto: '',
       dataInstauracao: format(new Date(), 'yyyy-MM-dd'),
       prazoInicial: 30,
@@ -406,8 +407,8 @@ export default function SindicanciasPage() {
                 <div className="space-y-2">
                   <Label htmlFor="investigado">Militar Investigado/Sindicado (Opcional)</Label>
                   <Select
-                    value={formData.militarInvestigadoId || 'none'}
-                    onValueChange={(value) => setFormData({...formData, militarInvestigadoId: value === 'none' ? '' : value})}
+                    value={formData.militarInvestigadoId}
+                    onValueChange={(value) => setFormData({...formData, militarInvestigadoId: value})}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o militar (se aplicável)" />

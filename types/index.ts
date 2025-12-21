@@ -187,6 +187,14 @@ export interface ProcessoDisciplinar {
   observacoes?: string;
   documentoUrl?: string;
   documentos?: string[];
+  // Campos para controle de prazo de defesa
+  itensTipificacao?: number[]; // Múltiplos itens do Anexo I
+  dataRecebimentoPAD?: Date; // Data em que o militar recebeu o PAD
+  prazoDefesa?: Date; // Data limite para defesa (5 dias úteis após recebimento)
+  respostaRecebida?: boolean; // Se o militar já respondeu
+  dataRespostaRecebida?: Date; // Quando a resposta foi recebida
+  prazoVencido?: boolean; // Flag para prazo vencido
+  notificacaoPrazoEnviada?: boolean; // Se já foi enviada notificação de prazo vencido
   // Campos para conclusão do PAD
   tipoPunicao?: TipoPunicao | null;
   diasPunicao?: number | null;

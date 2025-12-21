@@ -8,16 +8,18 @@ import {
   TableCell,
   WidthType,
   BorderStyle,
-  Packer
+  Packer,
+  ImageRun,
+  convertInchesToTwip
 } from 'docx';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ProcessoDisciplinar, Militar } from '@/types';
-import { buscarItemPorNumero } from '@/lib/constants/tipificacao';
+import { buscarItemEnriquecidoPorNumero } from '@/lib/constants/tipificacao-enriquecida';
 
 export interface DadosAcusacaoPAD {
   descricaoFato: string;
-  itemTipificacao: number;
+  itensTipificacao: number[];
   dataTransgressao: Date;
 }
 
@@ -73,11 +75,21 @@ function buildDefendenteText(militar: Militar): TextRun[] {
 
   // , RG [RG], lotado no [Unidade]
   textRuns.push(new TextRun({
-    text: `, RG ${rg}, lotado no ${unidade}`,
+    text: `, RG ${rg}, lotado no ${unidade}.`,
     size: 22,
   }));
 
   return textRuns;
+}
+
+// Função auxiliar para construir texto curto do militar para PEÇA ACUSATÓRIA
+function buildMilitarTextoCurto(militar: Militar): string {
+  const patente = militar.postoGraduacao || militar.patente || '';
+  const nomeDeGuerra = militar.nomeDeGuerra || militar.nomeGuerra || '';
+  const nomeCompleto = militar.nomeCompleto || militar.nome || '';
+  const nome = nomeDeGuerra || nomeCompleto.split(' ')[0] || '';
+
+  return `${patente} BM ${nome}`;
 }
 
 // Função auxiliar para criar seções com borda
@@ -124,6 +136,76 @@ function createBorderedSection(titulo: string, conteudo: Paragraph[]): Table {
   });
 }
 
+// Função para gerar parágrafos de tipificação com múltiplos itens
+function gerarParagrafosTipificacao(itensTipificacao: number[]): Paragraph[] {
+  const paragrafos: Paragraph[] = [];
+
+  // Ordenar itens
+  const itensOrdenados = [...itensTipificacao].sort((a, b) => a - b);
+
+  // Gerar texto da linha principal
+  let textoPrincipal = "A conduta imputada infringe, em tese, o disposto ";
+
+  if (itensOrdenados.length === 1) {
+    textoPrincipal += `no item no ${itensOrdenados[0]} `;
+  } else {
+    const ultimoItem = itensOrdenados.pop();
+    textoPrincipal += `nos itens no ${itensOrdenados.join(', no ')} e no ${ultimoItem} `;
+    itensOrdenados.push(ultimoItem!); // Restaurar o array
+  }
+
+  textoPrincipal += "do Anexo I, referenciado no art. 14, item 1, do Decreto Estadual no 3.767, de 04 de dezembro de 1980 (RDCBMERJ):";
+
+  // Parágrafo principal
+  paragrafos.push(new Paragraph({
+    children: [
+      new TextRun({
+        text: textoPrincipal,
+        size: 22,
+      }),
+    ],
+    alignment: AlignmentType.JUSTIFIED,
+    spacing: { after: 300 }
+  }));
+
+  // Lista de itens com bullets
+  for (const itemId of [...itensTipificacao].sort((a, b) => a - b)) {
+    const item = buscarItemEnriquecidoPorNumero(itemId);
+    if (item) {
+      paragrafos.push(new Paragraph({
+        children: [
+          new TextRun({
+            text: `• Item no ${item.id} - `,
+            size: 22,
+            bold: true,
+          }),
+          new TextRun({
+            text: `"${item.text}"`,
+            size: 20,
+            italics: true,
+            color: "333333",
+          }),
+        ],
+        alignment: AlignmentType.JUSTIFIED,
+        spacing: { after: 150 },
+        indent: { left: 400 }
+      }));
+    }
+  }
+
+  return paragrafos;
+}
+
+// Função para gerar texto do prazo de defesa
+function gerarTextoPrazoDefesa(): TextRun[] {
+  return [
+    new TextRun({
+      text: "Informo ao senhor defendente que sera aberto o prazo de 05 (cinco) dias uteis, a contar da data do recebimento deste, para que possa ser exercido seu direito constitucional a ampla defesa e ao contraditorio.",
+      size: 22,
+    }),
+  ];
+}
+
 // Classe para geração do novo formato de PAD
 export class PADNovoService {
   static async gerarDocumentoPAD(
@@ -131,9 +213,25 @@ export class PADNovoService {
     militar: Militar,
     dadosAcusacao: DadosAcusacaoPAD
   ): Promise<Blob> {
-    const itemTipificacao = buscarItemPorNumero(dadosAcusacao.itemTipificacao);
     const dataEmissao = new Date();
     const ano = dataEmissao.getFullYear();
+
+    // Preparar texto da peça acusatória
+    const militarTextoCurto = buildMilitarTextoCurto(militar);
+
+    // Tentar carregar o logo do GOCG
+    let logoImageRun: ImageRun | null = null;
+    try {
+      // Carregar o logo via fetch (funciona no browser)
+      const response = await fetch('/LOGO GOCG.svg');
+      if (response.ok) {
+        const svgText = await response.text();
+        // Nota: docx não suporta SVG diretamente, precisaríamos converter para PNG
+        // Por ora, vamos pular a imagem e adicionar um placeholder de texto
+      }
+    } catch (error) {
+      console.warn('Logo do GOCG não encontrado, documento será gerado sem logo');
+    }
 
     const doc = new Document({
       sections: [{
@@ -164,7 +262,7 @@ export class PADNovoService {
           new Paragraph({
             children: [
               new TextRun({
-                text: "COMANDO DE BOMBEIROS DE ÁREA I",
+                text: "COMANDO DE BOMBEIROS DE AREA I",
                 bold: true,
                 size: 20,
               }),
@@ -202,7 +300,7 @@ export class PADNovoService {
           new Paragraph({
             children: [
               new TextRun({
-                text: "1ª VIA",
+                text: "1a VIA",
                 bold: true,
                 size: 22,
               }),
@@ -243,12 +341,24 @@ export class PADNovoService {
             }),
           ]),
 
-          // Seção PEÇA ACUSATÓRIA
-          createBorderedSection("PEÇA ACUSATÓRIA", [
+          // Espaçamento
+          new Paragraph({ text: "", spacing: { after: 200 } }),
+
+          // Seção PEÇA ACUSATÓRIA - Texto conforme especificação
+          createBorderedSection("PECA ACUSATORIA", [
             new Paragraph({
               children: [
                 new TextRun({
-                  text: "Tendo chegado ao conhecimento do Cel BM Comandante do GOCG, os seguintes fatos que são imputados ao defendente: Por, em tese, ",
+                  text: "Tendo chegado ao conhecimento deste Maj BM, Subcomandante Administrativo do GOCG, no exercicio de suas atribuicoes administrativas e disciplinares no ambito do Grupamento Operacional do Comando Geral, o fato de que, em tese, o ",
+                  size: 22,
+                }),
+                new TextRun({
+                  text: militarTextoCurto,
+                  size: 22,
+                  bold: true,
+                }),
+                new TextRun({
+                  text: ", ",
                   size: 22,
                 }),
                 new TextRun({
@@ -261,64 +371,78 @@ export class PADNovoService {
             }),
           ]),
 
-          // Seção TIPIFICAÇÃO
-          createBorderedSection("TIPIFICAÇÃO", [
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: "Considerando a conduta imputada infringir, em tese, o disposto no item nº ",
-                  size: 22,
-                }),
-                new TextRun({
-                  text: dadosAcusacao.itemTipificacao.toString(),
-                  size: 22,
-                  bold: true,
-                }),
-                new TextRun({
-                  text: " do anexo I, referenciado no art. 14, item 1, do Decreto Estadual nº 3.767, de 04 de dezembro de 1980 (RDCBMERJ).",
-                  size: 22,
-                }),
-              ],
-              alignment: AlignmentType.JUSTIFIED,
-              spacing: { after: 200 }
-            }),
-            ...(itemTipificacao ? [
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: `"${itemTipificacao.text}"`,
-                    size: 20,
-                    italics: true,
-                    color: "444444",
-                  }),
-                ],
-                alignment: AlignmentType.JUSTIFIED,
-              })
-            ] : []),
-          ]),
+          // Espaçamento
+          new Paragraph({ text: "", spacing: { after: 200 } }),
+
+          // Seção TIPIFICAÇÃO - Com múltiplos itens
+          createBorderedSection("TIPIFICACAO", gerarParagrafosTipificacao(dadosAcusacao.itensTipificacao)),
+
+          // Espaçamento
+          new Paragraph({ text: "", spacing: { after: 200 } }),
 
           // Seção PRAZO PARA EXPOSIÇÃO DAS RAZÕES ESCRITAS DE DEFESA
-          createBorderedSection("PRAZO PARA EXPOSIÇÃO DAS RAZÕES ESCRITAS DE DEFESA", [
+          createBorderedSection("PRAZO PARA EXPOSICAO DAS RAZOES ESCRITAS DE DEFESA", [
             new Paragraph({
-              children: [
-                new TextRun({
-                  text: "Informo ao senhor defendente que será aberto o prazo de 05 (cinco) dias úteis, a contar da data do recebimento deste, para que possa ser exercido seu direito constitucional à ampla defesa e ao contraditório.",
-                  size: 22,
-                }),
-              ],
+              children: gerarTextoPrazoDefesa(),
               alignment: AlignmentType.JUSTIFIED,
             }),
           ]),
 
-          // Espaçamento antes do bloco de recebimento
+          // Espaçamento grande antes da assinatura
+          new Paragraph({ text: "", spacing: { after: 600 } }),
+
+          // Bloco de Assinatura
           new Paragraph({
-            text: "",
-            spacing: { after: 800 }
+            children: [
+              new TextRun({
+                text: "________________________________",
+                size: 22,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 100 }
           }),
+
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Leandro Verissimo de Oliveira Araujo - Maj. BM QOC/03",
+                size: 22,
+                bold: true,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 50 }
+          }),
+
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "RG CBMERJ 34038 | Id funcional 4149275-7",
+                size: 20,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 50 }
+          }),
+
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Subcomandante Administrativo do GOCG",
+                size: 20,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 }
+          }),
+
+          // Espaçamento antes do bloco de recebimento
+          new Paragraph({ text: "", spacing: { after: 400 } }),
 
           // Bloco de Recebimento
           new Table({
-            width: { size: 40, type: WidthType.PERCENTAGE },
+            width: { size: 45, type: WidthType.PERCENTAGE },
             borders: {
               top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
               bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
@@ -380,12 +504,20 @@ export class PADNovoService {
                 ],
               }),
             ],
-            float: {
-              horizontalAnchor: 'text',
-              verticalAnchor: 'text',
-              relativeHorizontalPosition: 'right',
-              relativeVerticalPosition: 'bottom',
-            },
+          }),
+
+          // Texto do logo como placeholder
+          new Paragraph({ text: "", spacing: { after: 300 } }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "[LOGO GOCG]",
+                size: 18,
+                color: "888888",
+                italics: true,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
           }),
         ],
       }],

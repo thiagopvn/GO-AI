@@ -19,7 +19,10 @@ import {
   Eye,
   CheckCircle,
   Edit,
-  History
+  History,
+  ClipboardCheck,
+  MessageSquare,
+  Clock
 } from 'lucide-react';
 import {
   collection,
@@ -47,9 +50,14 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ComportamentoService } from '@/lib/services/ComportamentoService';
 import { Combobox, ComboboxOption } from '@/components/ui/combobox';
-import { ITENS_TIPIFICACAO } from '@/lib/constants/tipificacao';
+import { MultiSelectTipificacao } from '@/components/ui/multi-select-tipificacao';
+import { PrazoBadge } from '@/components/ui/prazo-badge';
+// O componente MultiSelectTipificacao já importa internamente os itens enriquecidos
+import { adicionarDiasUteis } from '@/lib/utils/dias-uteis';
+// NotificacaoService é usado internamente pelo hook useVerificarPrazos
 import { PADService } from '@/lib/services/PADService';
 import { useAuth } from '@/contexts/AuthContext';
+import { useVerificarPrazos } from '@/hooks/useVerificarPrazos';
 
 // Lazy load componentes pesados
 const Dialog = dynamic(() => import('@/components/ui/dialog').then(mod => ({ default: mod.Dialog })));
@@ -72,6 +80,9 @@ import { Timestamp } from 'firebase/firestore';
 export default function ProcessosPage() {
   const { user } = useAuth();
   const padService = new PADService();
+
+  // Hook para verificar prazos automaticamente
+  useVerificarPrazos();
   const [processos, setProcessos] = useState<ProcessoDisciplinar[]>([]);
   const [militares, setMilitares] = useState<Militar[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +107,7 @@ export default function ProcessosPage() {
     militarId: '',
     dataTransgressao: '',
     descricaoFato: '',
-    itemTipificacao: '',
+    itensTipificacao: [] as number[],
     observacoes: ''
   });
 
@@ -111,13 +122,16 @@ export default function ProcessosPage() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        dataAbertura: doc.data().dataAbertura?.toDate() || new Date(),
-        dataFechamento: doc.data().dataFechamento?.toDate(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        updatedAt: doc.data().updatedAt?.toDate() || new Date()
+      const data = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+        dataAbertura: docSnap.data().dataAbertura?.toDate() || new Date(),
+        dataFechamento: docSnap.data().dataFechamento?.toDate(),
+        dataRecebimentoPAD: docSnap.data().dataRecebimentoPAD?.toDate(),
+        prazoDefesa: docSnap.data().prazoDefesa?.toDate(),
+        dataRespostaRecebida: docSnap.data().dataRespostaRecebida?.toDate(),
+        createdAt: docSnap.data().createdAt?.toDate() || new Date(),
+        updatedAt: docSnap.data().updatedAt?.toDate() || new Date()
       })) as ProcessoDisciplinar[];
 
       setProcessos(data);
@@ -196,15 +210,15 @@ export default function ProcessosPage() {
     return snapshot.size > 0;
   };
 
-  // Emitir PAD - CORRIGIDO para novo fluxo de ACUSAÇÃO
+  // Emitir PAD - CORRIGIDO para novo fluxo de ACUSAÇÃO com múltiplos itens
   const handleEmitirPAD = async () => {
     try {
       setIsGeneratingPAD(true);
 
       // Validações
       if (!formData.numeroPAD || !formData.militarId || !formData.dataTransgressao ||
-          !formData.descricaoFato || !formData.itemTipificacao) {
-        toast.error('Preencha todos os campos obrigatórios');
+          !formData.descricaoFato || formData.itensTipificacao.length === 0) {
+        toast.error('Preencha todos os campos obrigatórios (incluindo pelo menos um item de tipificação)');
         return;
       }
 
@@ -240,7 +254,13 @@ export default function ProcessosPage() {
         dataAbertura: new Date(),
         status: StatusProcesso.EM_ANDAMENTO,
         motivo: formData.descricaoFato,
-        observacoes: formData.observacoes
+        observacoes: formData.observacoes,
+        // Campos para múltiplos itens de tipificação
+        itensTipificacao: formData.itensTipificacao,
+        // Campos de controle de prazo - serão preenchidos quando o militar receber o PAD
+        respostaRecebida: false,
+        prazoVencido: false,
+        notificacaoPrazoEnviada: false
       };
 
       const processoRef = await addDoc(collection(db, 'processos'), {
@@ -256,14 +276,14 @@ export default function ProcessosPage() {
         dataAbertura: new Date()
       } as ProcessoDisciplinar;
 
-      // Gerar documento .docx com o novo formato
+      // Gerar documento .docx com o novo formato (múltiplos itens)
       const { PADNovoService } = await import('@/lib/services/pad-novo.service');
       const blob = await PADNovoService.gerarDocumentoPAD(
         processoCompleto,
         militar,
         {
           descricaoFato: formData.descricaoFato,
-          itemTipificacao: parseInt(formData.itemTipificacao),
+          itensTipificacao: formData.itensTipificacao,
           dataTransgressao: new Date(formData.dataTransgressao)
         }
       );
@@ -422,9 +442,44 @@ export default function ProcessosPage() {
       militarId: '',
       dataTransgressao: '',
       descricaoFato: '',
-      itemTipificacao: '',
+      itensTipificacao: [],
       observacoes: ''
     });
+  };
+
+  // Marcar recebimento do PAD pelo militar (inicia contagem de prazo)
+  const handleMarcarRecebimento = async (processoId: string) => {
+    try {
+      const dataRecebimento = new Date();
+      const prazoDefesa = adicionarDiasUteis(dataRecebimento, 5);
+
+      await updateDoc(doc(db, 'processos', processoId), {
+        dataRecebimentoPAD: dataRecebimento,
+        prazoDefesa: prazoDefesa,
+        updatedAt: serverTimestamp()
+      });
+
+      toast.success(`PAD marcado como recebido. Prazo para defesa: ${format(prazoDefesa, "dd/MM/yyyy", { locale: ptBR })}`);
+    } catch (error) {
+      console.error('Erro ao marcar recebimento:', error);
+      toast.error('Erro ao marcar recebimento do PAD');
+    }
+  };
+
+  // Marcar resposta recebida
+  const handleMarcarRespostaRecebida = async (processoId: string) => {
+    try {
+      await updateDoc(doc(db, 'processos', processoId), {
+        respostaRecebida: true,
+        dataRespostaRecebida: new Date(),
+        updatedAt: serverTimestamp()
+      });
+
+      toast.success('Resposta do militar marcada como recebida.');
+    } catch (error) {
+      console.error('Erro ao marcar resposta:', error);
+      toast.error('Erro ao marcar resposta recebida');
+    }
   };
 
   // Lançar punição antiga do sistema DGP
@@ -637,27 +692,15 @@ export default function ProcessosPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="itemTipificacao">Item da Tipificação (Anexo I - RDCBMERJ) *</Label>
-                  <Combobox
-                    options={ITENS_TIPIFICACAO.map((item): ComboboxOption => ({
-                      value: item.id.toString(),
-                      label: `${item.id}. ${item.text}`,
-                      searchableText: `${item.id} ${item.text}`
-                    }))}
-                    value={formData.itemTipificacao}
-                    onChange={(value) => setFormData({ ...formData, itemTipificacao: value })}
-                    placeholder="Selecione o item de tipificação"
-                    searchPlaceholder="Buscar por número ou descrição..."
-                    emptyMessage="Nenhum item encontrado."
+                  <Label htmlFor="itensTipificacao">Itens da Tipificacao (Anexo I - RDCBMERJ) *</Label>
+                  <p className="text-xs text-gray-500 mb-1">
+                    Selecione um ou mais itens. Use a busca inteligente digitando palavras-chave (ex: briga, mentir, atraso).
+                  </p>
+                  <MultiSelectTipificacao
+                    values={formData.itensTipificacao}
+                    onChange={(values) => setFormData({ ...formData, itensTipificacao: values })}
+                    placeholder="Buscar e selecionar itens de tipificacao..."
                   />
-                  {formData.itemTipificacao && (
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                      <p className="text-xs font-semibold text-blue-900 mb-1">Item Selecionado:</p>
-                      <p className="text-sm text-blue-800">
-                        {ITENS_TIPIFICACAO.find(item => item.id.toString() === formData.itemTipificacao)?.text}
-                      </p>
-                    </div>
-                  )}
                 </div>
 
                 <div className="grid gap-2">
@@ -742,26 +785,53 @@ export default function ProcessosPage() {
                     <div>
                       <CardTitle className="text-lg flex items-center gap-2">
                         <FileText className="h-5 w-5" />
-                        PAD Nº {processo.numero}
+                        PAD No {processo.numero}
                       </CardTitle>
                       <CardDescription className="mt-1">
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4" />
                           Aberto em {format(processo.dataAbertura, "dd/MM/yyyy", { locale: ptBR })}
+                          {processo.militarNome && (
+                            <span className="text-gray-600">
+                              - {processo.militarPosto} {processo.militarNome}
+                            </span>
+                          )}
                         </div>
                       </CardDescription>
                     </div>
-                    <Badge variant={
-                      processo.status === StatusProcesso.EM_ANDAMENTO ? 'default' :
-                      processo.status === StatusProcesso.FINALIZADO ? 'secondary' :
-                      'destructive'
-                    }>
-                      {processo.status}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-2">
+                      <Badge variant={
+                        processo.status === StatusProcesso.EM_ANDAMENTO ? 'default' :
+                        processo.status === StatusProcesso.FINALIZADO ? 'secondary' :
+                        'destructive'
+                      }>
+                        {processo.status}
+                      </Badge>
+                      {processo.status === StatusProcesso.EM_ANDAMENTO && (
+                        <PrazoBadge
+                          prazoDefesa={processo.prazoDefesa}
+                          respostaRecebida={processo.respostaRecebida}
+                        />
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-gray-600 mb-4">{processo.motivo}</p>
+
+                  {/* Itens de tipificação selecionados */}
+                  {processo.itensTipificacao && processo.itensTipificacao.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-xs font-semibold text-gray-500 mb-1">Itens de Tipificacao:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {processo.itensTipificacao.map((itemId: number) => (
+                          <Badge key={itemId} variant="outline" className="text-xs">
+                            Item {itemId}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap gap-2">
                     {processo.documentoUrl && (
@@ -787,19 +857,49 @@ export default function ProcessosPage() {
                       Visualizar
                     </Button>
 
+                    {/* Botões de controle de prazo - apenas para PADs em andamento */}
                     {processo.status === StatusProcesso.EM_ANDAMENTO && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700"
-                        onClick={() => {
-                          setSelectedProcesso(processo);
-                          setIsConcluirModalOpen(true);
-                        }}
-                      >
-                        <CheckCircle className="mr-2 h-4 w-4" />
-                        Concluir PAD
-                      </Button>
+                      <>
+                        {/* Botão para marcar recebimento pelo militar */}
+                        {!processo.dataRecebimentoPAD && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+                            onClick={() => handleMarcarRecebimento(processo.id)}
+                          >
+                            <ClipboardCheck className="mr-2 h-4 w-4" />
+                            Marcar Recebimento
+                          </Button>
+                        )}
+
+                        {/* Botão para marcar resposta recebida */}
+                        {processo.dataRecebimentoPAD && !processo.respostaRecebida && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
+                            onClick={() => handleMarcarRespostaRecebida(processo.id)}
+                          >
+                            <MessageSquare className="mr-2 h-4 w-4" />
+                            Marcar Resposta Recebida
+                          </Button>
+                        )}
+
+                        {/* Botão para concluir PAD */}
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                          onClick={() => {
+                            setSelectedProcesso(processo);
+                            setIsConcluirModalOpen(true);
+                          }}
+                        >
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Concluir PAD
+                        </Button>
+                      </>
                     )}
 
                     {processo.status === StatusProcesso.FINALIZADO && processo.decisao && (
