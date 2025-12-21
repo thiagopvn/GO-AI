@@ -251,15 +251,6 @@ export class PADNovoService {
           },
         },
         children: [
-          // Logo do GOCG (se disponível)
-          ...(logoImageRun ? [
-            new Paragraph({
-              children: [logoImageRun],
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 200 }
-            }),
-          ] : []),
-
           // Cabeçalho
           new Paragraph({
             children: [
@@ -494,7 +485,16 @@ export class PADNovoService {
               }),
             ],
             alignment: AlignmentType.CENTER,
+            spacing: { after: 400 }
           }),
+
+          // Logo do GOCG no final do documento
+          ...(logoImageRun ? [
+            new Paragraph({
+              children: [logoImageRun],
+              alignment: AlignmentType.CENTER,
+            }),
+          ] : []),
         ],
       }],
     });
