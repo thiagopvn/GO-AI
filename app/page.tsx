@@ -19,7 +19,7 @@ import {
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { StatusProcesso, TipoProcesso, Militar, Sindicancia, ProcessoDisciplinar } from '@/types';
-import { format } from 'date-fns';
+import { format, differenceInDays, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from 'next/link';
 
@@ -67,16 +67,19 @@ export default function Home() {
             collection(db, 'processos'),
             where('tipo', '==', TipoProcesso.PAD),
             where('status', '==', StatusProcesso.FINALIZADO),
-            orderBy('dataAbertura', 'desc'),
             limit(50)
           );
           const snapshot = await getDocs(q);
-          const pads = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            dataAbertura: doc.data().dataAbertura?.toDate(),
-            dataFechamento: doc.data().dataFechamento?.toDate()
-          } as ProcessoDisciplinar));
+          const pads = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              dataAbertura: data.dataAbertura?.toDate?.() || data.createdAt?.toDate?.(),
+              dataFechamento: data.dataFechamento?.toDate?.(),
+              prazoDefesa: data.prazoDefesa?.toDate?.()
+            } as ProcessoDisciplinar;
+          });
           setModalData(prev => ({ ...prev, pads }));
           break;
         }
@@ -85,15 +88,26 @@ export default function Home() {
             collection(db, 'processos'),
             where('tipo', '==', TipoProcesso.PAD),
             where('status', '==', StatusProcesso.EM_ANDAMENTO),
-            orderBy('dataAbertura', 'desc'),
             limit(50)
           );
           const snapshot = await getDocs(q);
-          const pads = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            dataAbertura: doc.data().dataAbertura?.toDate()
-          } as ProcessoDisciplinar));
+          const pads = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              dataAbertura: data.dataAbertura?.toDate?.() || data.createdAt?.toDate?.(),
+              prazoDefesa: data.prazoDefesa?.toDate?.(),
+              prazoVencido: data.prazoVencido,
+              respostaRecebida: data.respostaRecebida
+            } as ProcessoDisciplinar;
+          });
+          // Ordenar por prazo de defesa (mais urgentes primeiro)
+          pads.sort((a, b) => {
+            if (!a.prazoDefesa) return 1;
+            if (!b.prazoDefesa) return -1;
+            return a.prazoDefesa.getTime() - b.prazoDefesa.getTime();
+          });
           setModalData(prev => ({ ...prev, pads }));
           break;
         }
@@ -259,9 +273,33 @@ export default function Home() {
       );
     }
 
+    // Função para determinar o status do prazo e as classes de estilo
+    const getPrazoStatus = (pad: ProcessoDisciplinar) => {
+      if (pad.respostaRecebida) {
+        return { status: 'respondido', borderClass: 'border-green-300', bgClass: 'bg-green-50' };
+      }
+
+      if (!pad.prazoDefesa) {
+        return { status: 'normal', borderClass: 'border-gray-200', bgClass: 'hover:bg-gray-50' };
+      }
+
+      const hoje = startOfDay(new Date());
+      const prazo = startOfDay(pad.prazoDefesa);
+      const diasRestantes = differenceInDays(prazo, hoje);
+
+      if (pad.prazoVencido || isBefore(prazo, hoje)) {
+        return { status: 'vencido', borderClass: 'border-red-400', bgClass: 'bg-red-50', diasRestantes };
+      }
+
+      if (diasRestantes <= 5) {
+        return { status: 'proximo', borderClass: 'border-orange-400', bgClass: 'bg-orange-50', diasRestantes };
+      }
+
+      return { status: 'normal', borderClass: 'border-gray-200', bgClass: 'hover:bg-gray-50', diasRestantes };
+    };
+
     switch (selectedModal) {
       case 'padsFinalizados':
-      case 'padsEmAndamento':
         return modalData.pads.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             Nenhum PAD encontrado
@@ -269,12 +307,12 @@ export default function Home() {
         ) : (
           <div className="space-y-3">
             {modalData.pads.map((pad) => (
-              <div key={pad.id} className="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+              <div key={pad.id} className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-medium">{pad.numero || `PAD-${pad.id?.slice(0, 6)}`}</span>
-                      <Badge variant={pad.status === StatusProcesso.FINALIZADO ? 'default' : 'secondary'}>
+                      <Badge variant="default">
                         {pad.status}
                       </Badge>
                     </div>
@@ -291,6 +329,65 @@ export default function Home() {
                 </div>
               </div>
             ))}
+          </div>
+        );
+
+      case 'padsEmAndamento':
+        return modalData.pads.length === 0 ? (
+          <div className="text-center text-gray-500 py-8">
+            Nenhum PAD encontrado
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {modalData.pads.map((pad) => {
+              const prazoStatus = getPrazoStatus(pad);
+              return (
+                <div
+                  key={pad.id}
+                  className={`p-4 border-2 rounded-lg transition-colors ${prazoStatus.borderClass} ${prazoStatus.bgClass}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="font-medium">{pad.numero || `PAD-${pad.id?.slice(0, 6)}`}</span>
+                        <Badge variant="secondary">
+                          {pad.status}
+                        </Badge>
+                        {prazoStatus.status === 'vencido' && (
+                          <Badge variant="destructive" className="text-xs">
+                            PRAZO VENCIDO
+                          </Badge>
+                        )}
+                        {prazoStatus.status === 'proximo' && prazoStatus.diasRestantes !== undefined && (
+                          <Badge className="bg-orange-500 hover:bg-orange-600 text-xs">
+                            {prazoStatus.diasRestantes === 0 ? 'VENCE HOJE' : `${prazoStatus.diasRestantes} dia${prazoStatus.diasRestantes > 1 ? 's' : ''} restante${prazoStatus.diasRestantes > 1 ? 's' : ''}`}
+                          </Badge>
+                        )}
+                        {prazoStatus.status === 'respondido' && (
+                          <Badge className="bg-green-500 hover:bg-green-600 text-xs">
+                            RESPONDIDO
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600">{pad.militarPosto} {pad.militarNome}</p>
+                      {pad.prazoDefesa && (
+                        <p className={`text-xs mt-1 ${prazoStatus.status === 'vencido' ? 'text-red-600 font-medium' : prazoStatus.status === 'proximo' ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>
+                          Prazo de defesa: {format(pad.prazoDefesa, "dd/MM/yyyy", { locale: ptBR })}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-1">
+                        {pad.dataAbertura && `Abertura: ${format(pad.dataAbertura, "dd/MM/yyyy", { locale: ptBR })}`}
+                      </p>
+                    </div>
+                    <Link href={`/processos`}>
+                      <Button variant="ghost" size="sm">
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         );
 
