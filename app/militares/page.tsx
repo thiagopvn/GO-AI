@@ -834,7 +834,7 @@ export default function MilitaresPage() {
                   >
                     <CardTitle className="text-lg">{militar.nome}</CardTitle>
                     {militar.nomeDeGuerra && (
-                      <p className="text-sm font-medium text-gray-700">&quot;{militar.nomeDeGuerra}&quot;</p>
+                      <p className="text-sm text-gray-600">Nome de guerra: {militar.nomeDeGuerra}</p>
                     )}
                     <CardDescription>
                       {militar.patente} - RG: {militar.rg || militar.matricula}
