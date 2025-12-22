@@ -833,6 +833,9 @@ export default function MilitaresPage() {
                     }}
                   >
                     <CardTitle className="text-lg">{militar.nome}</CardTitle>
+                    {militar.nomeDeGuerra && (
+                      <p className="text-sm font-medium text-gray-700">&quot;{militar.nomeDeGuerra}&quot;</p>
+                    )}
                     <CardDescription>
                       {militar.patente} - RG: {militar.rg || militar.matricula}
                     </CardDescription>
@@ -924,6 +927,10 @@ export default function MilitaresPage() {
                     <div>
                       <p className="text-sm font-medium text-gray-500">Nome</p>
                       <p className="mt-1">{selectedMilitar.nome}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Nome de Guerra</p>
+                      <p className="mt-1">{selectedMilitar.nomeDeGuerra || '-'}</p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-500">Patente</p>
