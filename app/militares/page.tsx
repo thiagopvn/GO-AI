@@ -42,7 +42,7 @@ import {
   where
 } from 'firebase/firestore';
 import { firestore } from '@/lib/firebase/config';
-import { Militar, Patente, isPraca, Transgressao, ProcessoDisciplinar, StatusProcesso, TipoProcesso } from '@/types';
+import { Militar, Patente, isPraca, Transgressao, ProcessoDisciplinar, StatusProcesso, TipoProcesso, ComportamentoMilitar } from '@/types';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -119,6 +119,7 @@ export default function MilitaresPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [patenteFilter, setPatenteFilter] = useState<string>('todas');
+  const [comportamentoFilter, setComportamentoFilter] = useState<string>('todos');
   const [selectedMilitar, setSelectedMilitar] = useState<Militar | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -548,7 +549,16 @@ export default function MilitaresPage() {
     return acc;
   }, {} as Record<string, number>);
 
-  // Filtrar militares por busca e patente
+  // Contar militares por comportamento para exibir no filtro
+  const contagemPorComportamento = militares.reduce((acc, militar) => {
+    if (isPraca(militar.patente) && militar.comportamento) {
+      const comportamento = militar.comportamento;
+      acc[comportamento] = (acc[comportamento] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Filtrar militares por busca, patente e comportamento
   const filteredMilitares = militares.filter((militar) => {
     const matchSearch =
       militar.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -561,12 +571,27 @@ export default function MilitaresPage() {
       patenteFilter === 'pracas' && PATENTES_PRACAS.includes(militar.patente as Patente) ||
       militar.patente === patenteFilter;
 
-    return matchSearch && matchPatente;
+    const matchComportamento =
+      comportamentoFilter === 'todos' ||
+      (isPraca(militar.patente) && militar.comportamento === comportamentoFilter);
+
+    return matchSearch && matchPatente && matchComportamento;
   });
 
-  // Limpar filtro de patente
+  // Limpar filtros
   const handleClearFilter = () => {
     setPatenteFilter('todas');
+    setComportamentoFilter('todos');
+  };
+
+  // Limpar apenas filtro de patente
+  const handleClearPatenteFilter = () => {
+    setPatenteFilter('todas');
+  };
+
+  // Limpar apenas filtro de comportamento
+  const handleClearComportamentoFilter = () => {
+    setComportamentoFilter('todos');
   };
 
   // Renderizar badge de comportamento
@@ -799,14 +824,121 @@ export default function MilitaresPage() {
             </SelectContent>
           </Select>
 
-          {/* Botão para limpar filtro */}
+          {/* Botão para limpar filtro de patente */}
           {patenteFilter !== 'todas' && (
             <Button
               variant="ghost"
               size="icon"
-              onClick={handleClearFilter}
+              onClick={handleClearPatenteFilter}
               className="h-9 w-9 text-gray-500 hover:text-gray-700"
-              title="Limpar filtro"
+              title="Limpar filtro de patente"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
+        {/* Filtro por Comportamento */}
+        <div className="flex items-center gap-2">
+          <Select value={comportamentoFilter} onValueChange={setComportamentoFilter}>
+            <SelectTrigger className="w-[200px]">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gray-500" />
+                <SelectValue placeholder="Comportamento" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">
+                <span className="flex items-center justify-between w-full">
+                  Todos
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    {militares.filter(m => isPraca(m.patente)).length}
+                  </Badge>
+                </span>
+              </SelectItem>
+
+              <SelectSeparator />
+
+              <SelectItem value={ComportamentoMilitar.EXCEPCIONAL}>
+                <span className="flex items-center justify-between w-full">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    Excepcional
+                  </span>
+                  {contagemPorComportamento[ComportamentoMilitar.EXCEPCIONAL] > 0 && (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      {contagemPorComportamento[ComportamentoMilitar.EXCEPCIONAL]}
+                    </Badge>
+                  )}
+                </span>
+              </SelectItem>
+
+              <SelectItem value={ComportamentoMilitar.OTIMO}>
+                <span className="flex items-center justify-between w-full">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    Ótimo
+                  </span>
+                  {contagemPorComportamento[ComportamentoMilitar.OTIMO] > 0 && (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      {contagemPorComportamento[ComportamentoMilitar.OTIMO]}
+                    </Badge>
+                  )}
+                </span>
+              </SelectItem>
+
+              <SelectItem value={ComportamentoMilitar.BOM}>
+                <span className="flex items-center justify-between w-full">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500" />
+                    Bom
+                  </span>
+                  {contagemPorComportamento[ComportamentoMilitar.BOM] > 0 && (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      {contagemPorComportamento[ComportamentoMilitar.BOM]}
+                    </Badge>
+                  )}
+                </span>
+              </SelectItem>
+
+              <SelectItem value={ComportamentoMilitar.INSUFICIENTE}>
+                <span className="flex items-center justify-between w-full">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                    Insuficiente
+                  </span>
+                  {contagemPorComportamento[ComportamentoMilitar.INSUFICIENTE] > 0 && (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      {contagemPorComportamento[ComportamentoMilitar.INSUFICIENTE]}
+                    </Badge>
+                  )}
+                </span>
+              </SelectItem>
+
+              <SelectItem value={ComportamentoMilitar.MAU}>
+                <span className="flex items-center justify-between w-full">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                    Mau
+                  </span>
+                  {contagemPorComportamento[ComportamentoMilitar.MAU] > 0 && (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      {contagemPorComportamento[ComportamentoMilitar.MAU]}
+                    </Badge>
+                  )}
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Botão para limpar filtro de comportamento */}
+          {comportamentoFilter !== 'todos' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleClearComportamentoFilter}
+              className="h-9 w-9 text-gray-500 hover:text-gray-700"
+              title="Limpar filtro de comportamento"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -814,16 +946,34 @@ export default function MilitaresPage() {
         </div>
       </div>
 
-      {/* Indicador de filtro ativo */}
-      {patenteFilter !== 'todas' && (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-red-50 border-red-200 text-red-700 px-3 py-1">
-            <Filter className="h-3 w-3 mr-1" />
-            Filtrado por: {patenteFilter === 'oficiais' ? 'Oficiais' : patenteFilter === 'pracas' ? 'Praças' : patenteFilter}
-          </Badge>
+      {/* Indicador de filtros ativos */}
+      {(patenteFilter !== 'todas' || comportamentoFilter !== 'todos') && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {patenteFilter !== 'todas' && (
+            <Badge variant="outline" className="bg-red-50 border-red-200 text-red-700 px-3 py-1">
+              <Filter className="h-3 w-3 mr-1" />
+              Patente: {patenteFilter === 'oficiais' ? 'Oficiais' : patenteFilter === 'pracas' ? 'Praças' : patenteFilter}
+            </Badge>
+          )}
+          {comportamentoFilter !== 'todos' && (
+            <Badge variant="outline" className="bg-orange-50 border-orange-200 text-orange-700 px-3 py-1">
+              <Filter className="h-3 w-3 mr-1" />
+              Comportamento: {comportamentoFilter}
+            </Badge>
+          )}
           <span className="text-sm text-gray-500">
             {filteredMilitares.length} {filteredMilitares.length === 1 ? 'resultado' : 'resultados'}
           </span>
+          {(patenteFilter !== 'todas' && comportamentoFilter !== 'todos') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearFilter}
+              className="text-xs text-gray-500 hover:text-gray-700"
+            >
+              Limpar todos
+            </Button>
+          )}
         </div>
       )}
 
