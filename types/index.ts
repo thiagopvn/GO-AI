@@ -48,6 +48,11 @@ export interface Militar {
   dataNascimento?: string;
   dataInclusao?: Date;
   comportamento?: ComportamentoMilitar;
+  // Campos para rastreamento de mudança de comportamento
+  comportamentoAnterior?: ComportamentoMilitar; // Comportamento antes da última mudança
+  comportamentoMudou?: boolean; // Flag indicando que houve mudança não visualizada
+  dataMudancaComportamento?: Date; // Data/hora da última mudança
+  tipoMudancaComportamento?: 'melhoria' | 'queda'; // Se o comportamento melhorou ou piorou
   diasForaDaPauta?: number;
   status?: 'Ativo' | 'Inativo' | 'Afastado' | 'Baixado';
   observacoes?: string;

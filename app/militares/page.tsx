@@ -50,6 +50,7 @@ import { ComportamentoService } from '@/lib/services/ComportamentoService';
 import { useAuth } from '@/contexts/AuthContext';
 import { LancarPunicaoAntigaModal, PunicaoAntigaData } from '@/components/modals/LancarPunicaoAntigaModal';
 import { Timestamp } from 'firebase/firestore';
+import { ComportamentoChangeIndicator } from '@/components/ui/comportamento-change-indicator';
 
 // Lazy load componentes pesados - só carrega quando necessário
 const Tabs = dynamic(() => import('@/components/ui/tabs').then(mod => ({ default: mod.Tabs })));
@@ -153,6 +154,7 @@ export default function MilitaresPage() {
         id: doc.id,
         ...doc.data(),
         dataInclusao: doc.data().dataInclusao?.toDate() || new Date(),
+        dataMudancaComportamento: doc.data().dataMudancaComportamento?.toDate() || null,
         createdAt: doc.data().createdAt?.toDate() || new Date(),
         updatedAt: doc.data().updatedAt?.toDate() || new Date()
       })) as Militar[];
@@ -410,6 +412,17 @@ export default function MilitaresPage() {
     } catch (error) {
       console.error('Erro ao recalcular comportamento:', error);
       toast.error('Erro ao recalcular comportamento');
+    }
+  };
+
+  // Marcar mudança de comportamento como vista
+  const handleMarcarMudancaVista = async (militarId: string) => {
+    try {
+      await ComportamentoService.marcarMudancaComoVista(militarId);
+      toast.success('Mudança marcada como vista');
+    } catch (error) {
+      console.error('Erro ao marcar mudança como vista:', error);
+      toast.error('Erro ao marcar mudança como vista');
     }
   };
 
@@ -893,9 +906,22 @@ export default function MilitaresPage() {
                   {isPraca(militar.patente) && (() => {
                     const comportamentoCalculado = getComportamentoMilitar(militar);
                     return comportamentoCalculado ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">Comportamento:</span>
-                        {renderComportamentoBadge(comportamentoCalculado.classificacao)}
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">Comportamento:</span>
+                          {renderComportamentoBadge(comportamentoCalculado.classificacao)}
+                        </div>
+                        {/* Indicador de mudança de comportamento */}
+                        {militar.comportamentoMudou && (
+                          <ComportamentoChangeIndicator
+                            comportamentoAnterior={militar.comportamentoAnterior}
+                            comportamentoAtual={militar.comportamento}
+                            tipoMudanca={militar.tipoMudancaComportamento}
+                            dataMudanca={militar.dataMudancaComportamento}
+                            onMarcarVisto={() => handleMarcarMudancaVista(militar.id)}
+                            showInCard={true}
+                          />
+                        )}
                       </div>
                     ) : null;
                   })()}
@@ -955,9 +981,9 @@ export default function MilitaresPage() {
                     {isPraca(selectedMilitar.patente) && (() => {
                       const comportamentoCalculado = getComportamentoMilitar(selectedMilitar);
                       return comportamentoCalculado ? (
-                        <div>
+                        <div className="col-span-2">
                           <p className="text-sm font-medium text-gray-500">Comportamento</p>
-                          <div className="mt-1 flex flex-col gap-2">
+                          <div className="mt-1 flex flex-col gap-3">
                             <div className="flex items-center gap-2">
                               {renderComportamentoBadge(comportamentoCalculado.classificacao)}
                               <Button
@@ -969,6 +995,17 @@ export default function MilitaresPage() {
                                 Recalcular
                               </Button>
                             </div>
+                            {/* Indicador de mudança de comportamento - versão expandida */}
+                            {selectedMilitar.comportamentoMudou && (
+                              <ComportamentoChangeIndicator
+                                comportamentoAnterior={selectedMilitar.comportamentoAnterior}
+                                comportamentoAtual={selectedMilitar.comportamento}
+                                tipoMudanca={selectedMilitar.tipoMudancaComportamento}
+                                dataMudanca={selectedMilitar.dataMudancaComportamento}
+                                onMarcarVisto={() => handleMarcarMudancaVista(selectedMilitar.id)}
+                                showInCard={false}
+                              />
+                            )}
                             <p className="text-xs text-gray-500">{comportamentoCalculado.detalhes}</p>
                           </div>
                         </div>

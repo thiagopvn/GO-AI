@@ -349,17 +349,66 @@ export class ComportamentoService {
   }
 
   /**
+   * Retorna o nível numérico do comportamento (quanto maior, melhor)
+   * Usado para comparação entre comportamentos
+   */
+  private static getNivelComportamento(comportamento: ComportamentoMilitar): number {
+    const niveis: Record<ComportamentoMilitar, number> = {
+      [ComportamentoMilitar.MAU]: 1,
+      [ComportamentoMilitar.INSUFICIENTE]: 2,
+      [ComportamentoMilitar.BOM]: 3,
+      [ComportamentoMilitar.OTIMO]: 4,
+      [ComportamentoMilitar.EXCEPCIONAL]: 5
+    };
+    return niveis[comportamento] || 0;
+  }
+
+  /**
    * Atualiza o comportamento do militar no Firestore
+   * Detecta mudanças e atualiza os campos de rastreamento
    * @param militarId ID do militar
-   * @param comportamento Novo comportamento
+   * @param novoComportamento Novo comportamento calculado
    */
   private static async atualizarComportamentoNoFirestore(
     militarId: string,
-    comportamento: ComportamentoMilitar
+    novoComportamento: ComportamentoMilitar
   ): Promise<void> {
-    await updateDoc(doc(db, 'militares', militarId), {
-      comportamento: comportamento,
+    // Buscar o comportamento atual do militar para comparação
+    const militarDoc = await getDoc(doc(db, 'militares', militarId));
+    const militarData = militarDoc.data();
+    const comportamentoAtual = militarData?.comportamento as ComportamentoMilitar | undefined;
+
+    // Preparar dados de atualização
+    const updateData: Record<string, unknown> = {
+      comportamento: novoComportamento,
       dataUltimaAtualizacaoComportamento: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    };
+
+    // Verificar se houve mudança de comportamento
+    if (comportamentoAtual && comportamentoAtual !== novoComportamento) {
+      const nivelAnterior = this.getNivelComportamento(comportamentoAtual);
+      const nivelNovo = this.getNivelComportamento(novoComportamento);
+
+      // Registrar a mudança
+      updateData.comportamentoAnterior = comportamentoAtual;
+      updateData.comportamentoMudou = true;
+      updateData.dataMudancaComportamento = Timestamp.now();
+      updateData.tipoMudancaComportamento = nivelNovo > nivelAnterior ? 'melhoria' : 'queda';
+
+      console.log(`Mudança de comportamento detectada: ${comportamentoAtual} -> ${novoComportamento} (${updateData.tipoMudancaComportamento})`);
+    }
+
+    await updateDoc(doc(db, 'militares', militarId), updateData);
+  }
+
+  /**
+   * Marca a mudança de comportamento como visualizada
+   * @param militarId ID do militar
+   */
+  public static async marcarMudancaComoVista(militarId: string): Promise<void> {
+    await updateDoc(doc(db, 'militares', militarId), {
+      comportamentoMudou: false,
       updatedAt: Timestamp.now()
     });
   }
