@@ -28,7 +28,10 @@ import {
   Filter,
   X,
   ChevronDown,
-  History
+  History,
+  StickyNote,
+  Save,
+  Check
 } from 'lucide-react';
 import {
   collection,
@@ -135,6 +138,13 @@ export default function MilitaresPage() {
   const [militarParaPunicao, setMilitarParaPunicao] = useState<Militar | null>(null);
   const [isLancandoPunicao, setIsLancandoPunicao] = useState(false);
 
+  // Estados para observações com melhor UX
+  const [observacoesTemp, setObservacoesTemp] = useState('');
+  const [observacoesOriginal, setObservacoesOriginal] = useState('');
+  const [isSavingObservacoes, setIsSavingObservacoes] = useState(false);
+  const [observacoesSalvas, setObservacoesSalvas] = useState(false);
+  const [observacoesFilter, setObservacoesFilter] = useState<string>('todos');
+
   // Form state
   const [formData, setFormData] = useState({
     nome: '',
@@ -190,6 +200,16 @@ export default function MilitaresPage() {
 
     return () => unsubscribe();
   }, []);
+
+  // Sincronizar observações quando militar selecionado mudar
+  useEffect(() => {
+    if (selectedMilitar) {
+      const obs = selectedMilitar.observacoes || '';
+      setObservacoesTemp(obs);
+      setObservacoesOriginal(obs);
+      setObservacoesSalvas(false);
+    }
+  }, [selectedMilitar?.id]);
 
   // Carregar dados do militar selecionado
   useEffect(() => {
@@ -369,21 +389,33 @@ export default function MilitaresPage() {
     setIsEditModalOpen(true);
   };
 
-  // Atualizar observações
-  const handleUpdateObservacoes = async (observacoes: string) => {
+  // Atualizar observações com melhor UX
+  const handleUpdateObservacoes = async () => {
     if (!selectedMilitar) return;
+    if (observacoesTemp === observacoesOriginal) return;
 
     try {
+      setIsSavingObservacoes(true);
       await updateDoc(doc(firestore, 'militares', selectedMilitar.id), {
-        observacoes,
+        observacoes: observacoesTemp,
         updatedAt: serverTimestamp()
       });
-      toast.success('Observações atualizadas!');
+      setObservacoesOriginal(observacoesTemp);
+      setObservacoesSalvas(true);
+      toast.success('Observações salvas com sucesso!');
+
+      // Reset do indicador de sucesso após 3 segundos
+      setTimeout(() => setObservacoesSalvas(false), 3000);
     } catch (error) {
       console.error('Erro ao atualizar observações:', error);
-      toast.error('Erro ao atualizar observações');
+      toast.error('Erro ao salvar observações');
+    } finally {
+      setIsSavingObservacoes(false);
     }
   };
+
+  // Verificar se há alterações não salvas nas observações
+  const hasObservacoesChanges = observacoesTemp !== observacoesOriginal;
 
   // Obter comportamento do militar (usa o valor salvo no Firestore)
   const getComportamentoMilitar = (militar: Militar) => {
@@ -558,7 +590,10 @@ export default function MilitaresPage() {
     return acc;
   }, {} as Record<string, number>);
 
-  // Filtrar militares por busca, patente e comportamento
+  // Contar militares com observações
+  const militaresComObservacoes = militares.filter(m => m.observacoes && m.observacoes.trim() !== '').length;
+
+  // Filtrar militares por busca, patente, comportamento e observações
   const filteredMilitares = militares.filter((militar) => {
     const matchSearch =
       militar.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -575,13 +610,19 @@ export default function MilitaresPage() {
       comportamentoFilter === 'todos' ||
       (isPraca(militar.patente) && militar.comportamento === comportamentoFilter);
 
-    return matchSearch && matchPatente && matchComportamento;
+    const matchObservacoes =
+      observacoesFilter === 'todos' ||
+      (observacoesFilter === 'com' && militar.observacoes && militar.observacoes.trim() !== '') ||
+      (observacoesFilter === 'sem' && (!militar.observacoes || militar.observacoes.trim() === ''));
+
+    return matchSearch && matchPatente && matchComportamento && matchObservacoes;
   });
 
   // Limpar filtros
   const handleClearFilter = () => {
     setPatenteFilter('todas');
     setComportamentoFilter('todos');
+    setObservacoesFilter('todos');
   };
 
   // Limpar apenas filtro de patente
@@ -592,6 +633,11 @@ export default function MilitaresPage() {
   // Limpar apenas filtro de comportamento
   const handleClearComportamentoFilter = () => {
     setComportamentoFilter('todos');
+  };
+
+  // Limpar apenas filtro de observações
+  const handleClearObservacoesFilter = () => {
+    setObservacoesFilter('todos');
   };
 
   // Renderizar badge de comportamento
@@ -944,10 +990,73 @@ export default function MilitaresPage() {
             </Button>
           )}
         </div>
+
+        {/* Filtro por Observações */}
+        <div className="flex items-center gap-2">
+          <Select value={observacoesFilter} onValueChange={setObservacoesFilter}>
+            <SelectTrigger className="w-[180px]">
+              <div className="flex items-center gap-2">
+                <StickyNote className="h-4 w-4 text-gray-500" />
+                <SelectValue placeholder="Observações" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">
+                <span className="flex items-center justify-between w-full">
+                  Todas
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    {militares.length}
+                  </Badge>
+                </span>
+              </SelectItem>
+
+              <SelectSeparator />
+
+              <SelectItem value="com">
+                <span className="flex items-center justify-between w-full">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    Com observações
+                  </span>
+                  {militaresComObservacoes > 0 && (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      {militaresComObservacoes}
+                    </Badge>
+                  )}
+                </span>
+              </SelectItem>
+
+              <SelectItem value="sem">
+                <span className="flex items-center justify-between w-full">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-gray-300" />
+                    Sem observações
+                  </span>
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    {militares.length - militaresComObservacoes}
+                  </Badge>
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Botão para limpar filtro de observações */}
+          {observacoesFilter !== 'todos' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleClearObservacoesFilter}
+              className="h-9 w-9 text-gray-500 hover:text-gray-700"
+              title="Limpar filtro de observações"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Indicador de filtros ativos */}
-      {(patenteFilter !== 'todas' || comportamentoFilter !== 'todos') && (
+      {(patenteFilter !== 'todas' || comportamentoFilter !== 'todos' || observacoesFilter !== 'todos') && (
         <div className="flex items-center gap-2 flex-wrap">
           {patenteFilter !== 'todas' && (
             <Badge variant="outline" className="bg-red-50 border-red-200 text-red-700 px-3 py-1">
@@ -961,10 +1070,16 @@ export default function MilitaresPage() {
               Comportamento: {comportamentoFilter}
             </Badge>
           )}
+          {observacoesFilter !== 'todos' && (
+            <Badge variant="outline" className="bg-amber-50 border-amber-200 text-amber-700 px-3 py-1">
+              <StickyNote className="h-3 w-3 mr-1" />
+              {observacoesFilter === 'com' ? 'Com observações' : 'Sem observações'}
+            </Badge>
+          )}
           <span className="text-sm text-gray-500">
             {filteredMilitares.length} {filteredMilitares.length === 1 ? 'resultado' : 'resultados'}
           </span>
-          {(patenteFilter !== 'todas' && comportamentoFilter !== 'todos') && (
+          {[patenteFilter !== 'todas', comportamentoFilter !== 'todos', observacoesFilter !== 'todos'].filter(Boolean).length > 1 && (
             <Button
               variant="ghost"
               size="sm"
@@ -1052,7 +1167,28 @@ export default function MilitaresPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-600">{militar.unidade}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-600">{militar.unidade}</p>
+                    {/* Indicador discreto de observações */}
+                    {militar.observacoes && militar.observacoes.trim() !== '' && (
+                      <div className="group relative">
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-600 cursor-default">
+                          <StickyNote className="h-3 w-3" />
+                          <span className="text-xs font-medium">Obs</span>
+                        </div>
+                        {/* Tooltip com prévia da observação */}
+                        <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block w-64 p-3 bg-white rounded-lg shadow-lg border border-gray-200">
+                          <p className="text-xs font-medium text-gray-500 mb-1">Observações:</p>
+                          <p className="text-sm text-gray-700 line-clamp-3">
+                            {militar.observacoes}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-2 italic">
+                            Clique no card para ver completo
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   {isPraca(militar.patente) && (() => {
                     const comportamentoCalculado = getComportamentoMilitar(militar);
                     return comportamentoCalculado ? (
@@ -1267,14 +1403,104 @@ export default function MilitaresPage() {
 
               <TabsContent value="observacoes">
                 <div className="space-y-4">
-                  <Textarea
-                    placeholder="Adicione observações sobre este militar..."
-                    defaultValue={selectedMilitar.observacoes || ''}
-                    rows={10}
-                    onBlur={(e) => handleUpdateObservacoes(e.target.value)}
-                  />
-                  <p className="text-xs text-gray-500">
-                    As observações são salvas automaticamente ao sair do campo.
+                  {/* Header com status */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <StickyNote className="h-4 w-4 text-gray-500" />
+                      <span className="text-sm font-medium text-gray-700">Observações do Militar</span>
+                    </div>
+                    {/* Indicador de status */}
+                    {hasObservacoesChanges && (
+                      <Badge variant="outline" className="bg-amber-50 border-amber-200 text-amber-700 animate-pulse">
+                        Alterações não salvas
+                      </Badge>
+                    )}
+                    {observacoesSalvas && !hasObservacoesChanges && (
+                      <Badge variant="outline" className="bg-green-50 border-green-200 text-green-700">
+                        <Check className="h-3 w-3 mr-1" />
+                        Salvo
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Textarea com borda dinâmica */}
+                  <div className={`relative rounded-lg transition-all ${
+                    hasObservacoesChanges
+                      ? 'ring-2 ring-amber-300 ring-offset-1'
+                      : observacoesSalvas
+                        ? 'ring-2 ring-green-300 ring-offset-1'
+                        : ''
+                  }`}>
+                    <Textarea
+                      placeholder="Adicione observações importantes sobre este militar...
+
+Exemplos:
+• Situações especiais
+• Acompanhamentos necessários
+• Informações relevantes para a gestão"
+                      value={observacoesTemp}
+                      onChange={(e) => setObservacoesTemp(e.target.value)}
+                      rows={10}
+                      className="resize-none"
+                    />
+                  </div>
+
+                  {/* Área de ações */}
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <div className="text-xs text-gray-500">
+                      {observacoesTemp.length > 0 && (
+                        <span>{observacoesTemp.length} caracteres</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {/* Botão de descartar alterações */}
+                      {hasObservacoesChanges && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setObservacoesTemp(observacoesOriginal);
+                            setObservacoesSalvas(false);
+                          }}
+                          className="text-gray-500 hover:text-gray-700"
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Descartar
+                        </Button>
+                      )}
+                      {/* Botão de salvar */}
+                      <Button
+                        onClick={handleUpdateObservacoes}
+                        disabled={!hasObservacoesChanges || isSavingObservacoes}
+                        className={`transition-all ${
+                          hasObservacoesChanges
+                            ? 'bg-red-600 hover:bg-red-700'
+                            : 'bg-gray-300 cursor-not-allowed'
+                        }`}
+                      >
+                        {isSavingObservacoes ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Salvando...
+                          </>
+                        ) : observacoesSalvas && !hasObservacoesChanges ? (
+                          <>
+                            <Check className="h-4 w-4 mr-2" />
+                            Salvo
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4 mr-2" />
+                            Salvar Observações
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Dica */}
+                  <p className="text-xs text-gray-400 italic">
+                    As observações ficam visíveis apenas para usuários autorizados do sistema.
                   </p>
                 </div>
               </TabsContent>
