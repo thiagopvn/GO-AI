@@ -78,9 +78,9 @@ export class DocumentService {
         properties: {
           page: {
             margin: {
-              top: 567, // Reduzido de 720 (0.79 polegadas)
+              top: 283,    // 0.5cm
               right: 567,
-              bottom: 567,
+              bottom: 283, // 0.5cm
               left: 567,
             },
           },
@@ -522,7 +522,7 @@ export class DocumentService {
       new Paragraph({
         children: [
           new TextRun({
-            text: "Leandro Veríssimo de Oliveira Araujo - Maj. BM QOC/03",
+            text: "Leandro Veríssimo de Oliveira Araújo - Maj. BM QOC/03",
             bold: true,
             size: 22,
           }),

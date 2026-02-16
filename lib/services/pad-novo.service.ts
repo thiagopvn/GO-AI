@@ -147,14 +147,14 @@ function gerarParagrafosTipificacao(itensTipificacao: number[]): Paragraph[] {
   let textoPrincipal = "A conduta imputada infringe, em tese, o disposto ";
 
   if (itensOrdenados.length === 1) {
-    textoPrincipal += `no item no ${itensOrdenados[0]} `;
+    textoPrincipal += `no item nº ${itensOrdenados[0]} `;
   } else {
     const ultimoItem = itensOrdenados.pop();
-    textoPrincipal += `nos itens no ${itensOrdenados.join(', no ')} e no ${ultimoItem} `;
+    textoPrincipal += `nos itens nº ${itensOrdenados.join(', nº ')} e nº ${ultimoItem} `;
     itensOrdenados.push(ultimoItem!); // Restaurar o array
   }
 
-  textoPrincipal += "do Anexo I, referenciado no art. 14, item 1, do Decreto Estadual no 3.767, de 04 de dezembro de 1980 (RDCBMERJ):";
+  textoPrincipal += "do Anexo I, referenciado no art. 14, item 1, do Decreto Estadual nº 3.767, de 04 de dezembro de 1980 (RDCBMERJ):";
 
   // Parágrafo principal
   paragrafos.push(new Paragraph({
@@ -175,7 +175,7 @@ function gerarParagrafosTipificacao(itensTipificacao: number[]): Paragraph[] {
       paragrafos.push(new Paragraph({
         children: [
           new TextRun({
-            text: `• Item no ${item.id} - `,
+            text: `• Item nº ${item.id} - `,
             size: 22,
             bold: true,
           }),
@@ -200,7 +200,7 @@ function gerarParagrafosTipificacao(itensTipificacao: number[]): Paragraph[] {
 function gerarTextoPrazoDefesa(): TextRun[] {
   return [
     new TextRun({
-      text: "Informo ao senhor defendente que sera aberto o prazo de 05 (cinco) dias uteis, a contar da data do recebimento deste, para que possa ser exercido seu direito constitucional a ampla defesa e ao contraditorio.",
+      text: "Informo ao senhor defendente, que será aberto o prazo de 05 (cinco) dias úteis, a contar da data do recebimento deste, para que possa ser exercido seu direito constitucional à ampla defesa e ao contraditório, nos termos do art. 5º, inciso LV, da Constituição da República de 1988.",
       size: 22,
     }),
   ];
@@ -243,9 +243,9 @@ export class PADNovoService {
         properties: {
           page: {
             margin: {
-              top: 1440,
+              top: 283,    // 0.5cm
               right: 1440,
-              bottom: 1440,
+              bottom: 283, // 0.5cm
               left: 1440,
             },
           },
@@ -267,7 +267,7 @@ export class PADNovoService {
           new Paragraph({
             children: [
               new TextRun({
-                text: "COMANDO DE BOMBEIROS DE AREA I",
+                text: "COMANDO DE BOMBEIROS DE ÁREA I",
                 bold: true,
                 size: 20,
               }),
@@ -334,11 +334,11 @@ export class PADNovoService {
           ]),
 
           // Seção PEÇA ACUSATÓRIA - Texto conforme especificação
-          createBorderedSection("PECA ACUSATORIA", [
+          createBorderedSection("PEÇA ACUSATÓRIA", [
             new Paragraph({
               children: [
                 new TextRun({
-                  text: "Tendo chegado ao conhecimento deste Maj BM, Subcomandante Administrativo do GOCG, no exercicio de suas atribuicoes administrativas e disciplinares no ambito do Grupamento Operacional do Comando Geral, o fato de que, em tese, o ",
+                  text: "Tendo chegado ao conhecimento deste Maj BM, Subcomandante Administrativo do GOCG, no exercício de suas atribuições administrativas e disciplinares no âmbito do Grupamento Operacional do Comando Geral, o fato de que, em tese, o ",
                   size: 22,
                 }),
                 new TextRun({
@@ -361,10 +361,10 @@ export class PADNovoService {
           ]),
 
           // Seção TIPIFICAÇÃO - Com múltiplos itens
-          createBorderedSection("TIPIFICACAO", gerarParagrafosTipificacao(dadosAcusacao.itensTipificacao)),
+          createBorderedSection("TIPIFICAÇÃO", gerarParagrafosTipificacao(dadosAcusacao.itensTipificacao)),
 
           // Seção PRAZO PARA EXPOSIÇÃO DAS RAZÕES ESCRITAS DE DEFESA
-          createBorderedSection("PRAZO PARA EXPOSICAO DAS RAZOES ESCRITAS DE DEFESA", [
+          createBorderedSection("PRAZO PARA EXPOSIÇÃO DAS RAZÕES ESCRITAS DE DEFESA", [
             new Paragraph({
               children: gerarTextoPrazoDefesa(),
               alignment: AlignmentType.JUSTIFIED,
@@ -376,7 +376,7 @@ export class PADNovoService {
 
           // Bloco de Recebimento
           new Table({
-            width: { size: 45, type: WidthType.PERCENTAGE },
+            width: { size: 35, type: WidthType.PERCENTAGE },
             borders: {
               top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
               bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
@@ -392,27 +392,7 @@ export class PADNovoService {
                         children: [
                           new TextRun({
                             text: "Recebi o original",
-                            size: 22,
-                          }),
-                        ],
-                        alignment: AlignmentType.CENTER,
-                        spacing: { after: 200 }
-                      }),
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: "Em ___/___/___.",
-                            size: 22,
-                          }),
-                        ],
-                        alignment: AlignmentType.CENTER,
-                        spacing: { after: 400 }
-                      }),
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: "_________________________",
-                            size: 22,
+                            size: 18,
                           }),
                         ],
                         alignment: AlignmentType.CENTER,
@@ -421,18 +401,38 @@ export class PADNovoService {
                       new Paragraph({
                         children: [
                           new TextRun({
+                            text: "Em ___/___/___.",
+                            size: 18,
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { after: 200 }
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({
+                            text: "__________________",
+                            size: 18,
+                          }),
+                        ],
+                        alignment: AlignmentType.CENTER,
+                        spacing: { after: 50 }
+                      }),
+                      new Paragraph({
+                        children: [
+                          new TextRun({
                             text: "Assinatura",
-                            size: 22,
+                            size: 18,
                           }),
                         ],
                         alignment: AlignmentType.CENTER,
                       }),
                     ],
                     margins: {
-                      top: 200,
-                      bottom: 200,
-                      left: 200,
-                      right: 200,
+                      top: 100,
+                      bottom: 100,
+                      left: 100,
+                      right: 100,
                     },
                   }),
                 ],
@@ -458,7 +458,7 @@ export class PADNovoService {
           new Paragraph({
             children: [
               new TextRun({
-                text: "Leandro Verissimo de Oliveira Araujo - Maj. BM QOC/03",
+                text: "Leandro Veríssimo de Oliveira Araújo - Maj. BM QOC/03",
                 size: 22,
               }),
             ],

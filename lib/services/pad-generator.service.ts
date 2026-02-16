@@ -528,9 +528,9 @@ export class PADGeneratorServiceNovo {
       properties: {
         page: {
           margin: {
-            top: 1440,  // 1 polegada = 1440 twentieths of a point
+            top: 283,    // 0.5cm
             right: 1440,
-            bottom: 1440,
+            bottom: 283, // 0.5cm
             left: 1440,
           },
         },
@@ -564,7 +564,7 @@ export class PADGeneratorServiceNovo {
         new Paragraph({
           children: [
             new TextRun({
-              text: "GRUPAMENTO DE OPERAÇÕES COM CÃES (GOCG)",
+              text: "GRUPAMENTO OPERACIONAL DO COMANDO GERAL",
               bold: true,
               size: 20,
             }),
@@ -705,7 +705,7 @@ export class PADGeneratorServiceNovo {
           new Paragraph({
             children: [
               new TextRun({
-                text: "Considerando a conduta imputada infringir, em tese, o disposto no item nº ",
+                text: "A conduta imputada infringe, em tese, o disposto no item nº ",
                 size: 22,
               }),
               new TextRun({
@@ -714,7 +714,7 @@ export class PADGeneratorServiceNovo {
                 bold: true,
               }),
               new TextRun({
-                text: " do anexo I, referenciado no art. 14, item 1, do Decreto Estadual nº 3.767, de 04 de dezembro de 1980 (RDCBMERJ).",
+                text: " do Anexo I, referenciado no art. 14, item 1, do Decreto Estadual nº 3.767, de 04 de dezembro de 1980 (RDCBMERJ).",
                 size: 22,
               }),
             ],
@@ -741,7 +741,7 @@ export class PADGeneratorServiceNovo {
           new Paragraph({
             children: [
               new TextRun({
-                text: "Informo ao senhor defendente que será aberto o prazo de 05 (cinco) dias úteis, a contar da data do recebimento deste, para que possa ser exercido seu direito constitucional à ampla defesa e ao contraditório.",
+                text: "Informo ao senhor defendente, que será aberto o prazo de 05 (cinco) dias úteis, a contar da data do recebimento deste, para que possa ser exercido seu direito constitucional à ampla defesa e ao contraditório, nos termos do art. 5º, inciso LV, da Constituição da República de 1988.",
                 size: 22,
               }),
             ],
@@ -757,7 +757,7 @@ export class PADGeneratorServiceNovo {
 
         // === BLOCO DE RECEBIMENTO ===
         new Table({
-          width: { size: 40, type: WidthType.PERCENTAGE },
+          width: { size: 35, type: WidthType.PERCENTAGE },
           borders: {
             top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
             bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
@@ -773,27 +773,7 @@ export class PADGeneratorServiceNovo {
                       children: [
                         new TextRun({
                           text: "Recebi o original",
-                          size: 22,
-                        }),
-                      ],
-                      alignment: AlignmentType.CENTER,
-                      spacing: { after: 200 }
-                    }),
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: "Em ___/___/___.",
-                          size: 22,
-                        }),
-                      ],
-                      alignment: AlignmentType.CENTER,
-                      spacing: { after: 400 }
-                    }),
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: "_________________________",
-                          size: 22,
+                          size: 18,
                         }),
                       ],
                       alignment: AlignmentType.CENTER,
@@ -802,18 +782,38 @@ export class PADGeneratorServiceNovo {
                     new Paragraph({
                       children: [
                         new TextRun({
+                          text: "Em ___/___/___.",
+                          size: 18,
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                      spacing: { after: 200 }
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: "__________________",
+                          size: 18,
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                      spacing: { after: 50 }
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({
                           text: "Assinatura",
-                          size: 22,
+                          size: 18,
                         }),
                       ],
                       alignment: AlignmentType.CENTER,
                     }),
                   ],
                   margins: {
-                    top: 200,
-                    bottom: 200,
-                    left: 200,
-                    right: 200,
+                    top: 100,
+                    bottom: 100,
+                    left: 100,
+                    right: 100,
                   },
                 }),
               ],
