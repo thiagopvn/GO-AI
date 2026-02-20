@@ -89,7 +89,7 @@ export interface Transgressao {
 export interface Sindicancia {
   id: string;
   numero: string;
-  tipo: 'Sindicância' | 'IPM' | 'Conselho de Disciplina' | 'Apuratória';
+  tipo: 'Sindicância' | 'IPM' | 'Conselho de Disciplina' | 'PAS';
   encarregadoId: string;
   encarregadoNome: string;
   encarregadoPosto: string;

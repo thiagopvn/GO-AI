@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { SindicanciaService } from '@/lib/services/sindicancia.service';
 import { Sindicancia, DistribuicaoSindicancia, Militar } from '@/types';
+import { Combobox, ComboboxOption } from '@/components/ui/combobox';
 import { db } from '@/lib/firebase/config';
 import { collection, getDocs, query, orderBy as firestoreOrderBy } from 'firebase/firestore';
 import { LoadingPage } from '@/components/ui/loading-page';
@@ -52,7 +53,7 @@ export default function SindicanciasPage() {
     numero: '',
     tipo: 'Sindicância' as Sindicancia['tipo'],
     encarregadoId: '',
-    militarInvestigadoId: 'none',
+    militarInvestigadoId: '',
     assunto: '',
     dataInstauracao: format(new Date(), 'yyyy-MM-dd'),
     prazoInicial: 30,
@@ -142,7 +143,7 @@ export default function SindicanciasPage() {
       const dataInstauracao = new Date(formData.dataInstauracao);
       const dataLimite = addDays(dataInstauracao, formData.prazoInicial);
 
-      const hasMilitarInvestigado = formData.militarInvestigadoId !== 'none';
+      const hasMilitarInvestigado = formData.militarInvestigadoId !== '';
       const militarInvestigado = hasMilitarInvestigado
         ? militares.find(m => m.id === formData.militarInvestigadoId)
         : null;
@@ -252,7 +253,7 @@ export default function SindicanciasPage() {
       numero: '',
       tipo: 'Sindicância',
       encarregadoId: '',
-      militarInvestigadoId: 'none',
+      militarInvestigadoId: '',
       assunto: '',
       dataInstauracao: format(new Date(), 'yyyy-MM-dd'),
       prazoInicial: 30,
@@ -353,7 +354,7 @@ export default function SindicanciasPage() {
                         <SelectItem value="Sindicância">Sindicância</SelectItem>
                         <SelectItem value="IPM">IPM</SelectItem>
                         <SelectItem value="Conselho de Disciplina">Conselho de Disciplina</SelectItem>
-                        <SelectItem value="Apuratória">Apuratória</SelectItem>
+                        <SelectItem value="PAS">PAS</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -406,22 +407,21 @@ export default function SindicanciasPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="investigado">Militar Investigado/Sindicado (Opcional)</Label>
-                  <Select
+                  <Combobox
+                    options={militares.map((militar): ComboboxOption => ({
+                      value: militar.id,
+                      label: `${militar.postoGraduacao || militar.patente || ''} ${militar.nomeCompleto || militar.nome} - RG: ${militar.matricula}`,
+                      searchableText: `${militar.postoGraduacao || militar.patente || ''} ${militar.nomeCompleto || militar.nome} ${militar.matricula} ${militar.nomeDeGuerra || militar.nomeGuerra || ''}`
+                    }))}
                     value={formData.militarInvestigadoId}
-                    onValueChange={(value) => setFormData({...formData, militarInvestigadoId: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o militar (se aplicável)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhum</SelectItem>
-                      {militares.map(militar => (
-                        <SelectItem key={militar.id} value={militar.id}>
-                          {militar.postoGraduacao || militar.patente} {militar.nomeCompleto || militar.nome} - RG: {militar.matricula}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onChange={(value) => setFormData({...formData, militarInvestigadoId: value})}
+                    placeholder="Nenhum (sem militar investigado)"
+                    searchPlaceholder="Buscar por nome, matrícula ou posto..."
+                    emptyMessage="Nenhum militar encontrado."
+                  />
+                  <p className="text-sm text-gray-500">
+                    Clique no militar selecionado novamente para desmarcar
+                  </p>
                 </div>
 
                 <div className="space-y-2">
