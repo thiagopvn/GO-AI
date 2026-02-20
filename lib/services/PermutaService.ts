@@ -5,7 +5,6 @@ import {
   updateDoc,
   getDocs,
   query,
-  where,
   orderBy,
   writeBatch,
 } from 'firebase/firestore';
@@ -32,27 +31,34 @@ export class PermutaService {
   }
 
   /**
-   * Cria múltiplas permutas em lote
+   * Cria múltiplas permutas em lote.
+   * Se houver mais de 500, divide em batches.
    */
   static async criarPermutasEmLote(inputs: PermutaInput[], criadoPor: string): Promise<string[]> {
     const agora = new Date().toISOString();
-    const batch = writeBatch(db);
     const ids: string[] = [];
 
-    for (const input of inputs) {
-      const docRef = doc(collection(db, COLLECTION));
-      batch.set(docRef, {
-        ...input,
-        enviada: false,
-        arquivada: false,
-        criadoPor,
-        criadoEm: agora,
-        atualizadoEm: agora,
-      });
-      ids.push(docRef.id);
+    const BATCH_SIZE = 400;
+    for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
+      const chunk = inputs.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+
+      for (const input of chunk) {
+        const docRef = doc(collection(db, COLLECTION));
+        batch.set(docRef, {
+          ...input,
+          enviada: false,
+          arquivada: false,
+          criadoPor,
+          criadoEm: agora,
+          atualizadoEm: agora,
+        });
+        ids.push(docRef.id);
+      }
+
+      await batch.commit();
     }
 
-    await batch.commit();
     return ids;
   }
 
@@ -68,31 +74,12 @@ export class PermutaService {
   }
 
   /**
-   * Lista permutas com filtros
+   * Lista permutas com filtros.
+   * Busca todos os documentos com orderBy('data','desc') e filtra client-side
+   * para evitar necessidade de índices compostos no Firestore.
    */
   static async listarPermutas(filtros?: PermutaFiltros): Promise<PermutaDoc[]> {
-    const constraints: Parameters<typeof query>[1][] = [];
-
-    // Firestore only allows one inequality filter, so we handle search client-side
-    if (filtros?.arquivada !== undefined) {
-      constraints.push(where('arquivada', '==', filtros.arquivada));
-    }
-
-    if (filtros?.enviada !== undefined) {
-      constraints.push(where('enviada', '==', filtros.enviada));
-    }
-
-    if (filtros?.startDate) {
-      constraints.push(where('data', '>=', filtros.startDate));
-    }
-
-    if (filtros?.endDate) {
-      constraints.push(where('data', '<=', filtros.endDate));
-    }
-
-    constraints.push(orderBy('data', 'desc'));
-
-    const q = query(collection(db, COLLECTION), ...constraints);
+    const q = query(collection(db, COLLECTION), orderBy('data', 'desc'));
     const snapshot = await getDocs(q);
 
     let results = snapshot.docs.map((docSnap) => ({
@@ -100,16 +87,33 @@ export class PermutaService {
       ...docSnap.data(),
     })) as PermutaDoc[];
 
-    // Filtro client-side por busca (RG ou nome)
+    // Filtros client-side
+    if (filtros?.arquivada !== undefined) {
+      results = results.filter((p) => p.arquivada === filtros.arquivada);
+    }
+
+    if (filtros?.enviada !== undefined) {
+      results = results.filter((p) => p.enviada === filtros.enviada);
+    }
+
+    if (filtros?.startDate) {
+      results = results.filter((p) => p.data >= filtros.startDate!);
+    }
+
+    if (filtros?.endDate) {
+      results = results.filter((p) => p.data <= filtros.endDate!);
+    }
+
     if (filtros?.search) {
-      const searchLower = filtros.search.toLowerCase().replace(/\D/g, '') || filtros.search.toLowerCase();
+      const s = filtros.search.toLowerCase();
+      const sDigits = s.replace(/\D/g, '');
       results = results.filter((p) => {
         const entraMatch =
-          p.militarEntraRg.includes(searchLower) ||
-          p.militarEntraData?.nome?.toLowerCase().includes(filtros.search!.toLowerCase());
+          (sDigits && p.militarEntraRg.includes(sDigits)) ||
+          p.militarEntraData?.nome?.toLowerCase().includes(s);
         const saiMatch =
-          p.militarSaiRg.includes(searchLower) ||
-          p.militarSaiData?.nome?.toLowerCase().includes(filtros.search!.toLowerCase());
+          (sDigits && p.militarSaiRg.includes(sDigits)) ||
+          p.militarSaiData?.nome?.toLowerCase().includes(s);
         return entraMatch || saiMatch;
       });
     }

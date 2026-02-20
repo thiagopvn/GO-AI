@@ -8,7 +8,6 @@ import {
   deleteDoc,
   doc,
   writeBatch,
-  orderBy,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { MilitarPermuta } from '@/types/permutas';
@@ -20,12 +19,14 @@ export class MilitarPermutaService {
    * Lista todos os militares de permutas
    */
   static async listarTodos(): Promise<MilitarPermuta[]> {
-    const q = query(collection(db, COLLECTION), orderBy('nome', 'asc'));
+    const q = query(collection(db, COLLECTION));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => ({
+    const results = snapshot.docs.map((d) => ({
       id: d.id,
       ...d.data(),
     })) as MilitarPermuta[];
+    // Ordena client-side para evitar necessidade de índice
+    return results.sort((a, b) => a.nome.localeCompare(b.nome));
   }
 
   /**
