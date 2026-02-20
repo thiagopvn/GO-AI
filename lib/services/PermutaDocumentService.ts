@@ -17,7 +17,7 @@ import { storage } from '@/lib/firebase/config';
 import { PermutaDoc, ORDEM_FUNCOES, funcaoParaTituloDocumento } from '@/types/permutas';
 
 /**
- * Formata RG com ponto: "12345678" -> "12345.678"
+ * Formata RG com ponto: "53726" -> "53.726"
  */
 function formatarRG(rg: string): string {
   const rgLimpo = rg.replace(/\D/g, '');
@@ -28,14 +28,28 @@ function formatarRG(rg: string): string {
 }
 
 /**
- * Formata nome do militar: "CB BM QPE SILVA"
+ * Converte graduação para title case:
+ * "1° TEN" -> "1° Ten", "CAP" -> "Cap", "2° TEN" -> "2° Ten"
  */
-function formatarMilitar(snap: { grad: string; quadro: string; nome: string }): string {
-  return `${snap.grad} BM ${snap.quadro} ${snap.nome}`;
+function formatarGraduacao(grad: string): string {
+  return grad
+    .split(' ')
+    .map((part) => {
+      if (/\d/.test(part)) return part; // "1°", "2°" ficam como estão
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join(' ');
 }
 
 /**
- * Formata data ISO para DD/MM/YYYY considerando UTC
+ * Formata nome do militar: "Cap BM QOC FORTES"
+ */
+function formatarMilitar(snap: { grad: string; quadro: string; nome: string }): string {
+  return `${formatarGraduacao(snap.grad)} BM ${snap.quadro} ${snap.nome}`;
+}
+
+/**
+ * Formata data ISO para DD/MM/YYYY
  */
 function formatarDataPtBR(dataISO: string): string {
   const [ano, mes, dia] = dataISO.split('-');
@@ -48,7 +62,6 @@ function formatarDataPtBR(dataISO: string): string {
 function agruparPorFuncao(permutas: PermutaDoc[]): Map<string, PermutaDoc[]> {
   const grupos = new Map<string, PermutaDoc[]>();
 
-  // Inicializa grupos na ordem correta
   for (const funcao of ORDEM_FUNCOES) {
     grupos.set(funcao, []);
   }
@@ -61,16 +74,12 @@ function agruparPorFuncao(permutas: PermutaDoc[]): Map<string, PermutaDoc[]> {
     grupos.get(funcao)!.push(p);
   }
 
-  // Ordena cada grupo por data asc
   for (const [, lista] of grupos) {
     lista.sort((a, b) => a.data.localeCompare(b.data));
   }
 
-  // Remove grupos vazios
   for (const [key, lista] of grupos) {
-    if (lista.length === 0) {
-      grupos.delete(key);
-    }
+    if (lista.length === 0) grupos.delete(key);
   }
 
   return grupos;
@@ -83,10 +92,13 @@ const CELL_BORDER = {
   right: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
 };
 
+// Fundo cinza claro #D9D9D9 para cabeçalhos
+const HEADER_SHADING = {
+  type: ShadingType.CLEAR,
+  fill: 'D9D9D9',
+};
+
 export class PermutaDocumentService {
-  /**
-   * Gera documento Word (.docx) com permutas agrupadas por função
-   */
   static async gerarDocumento(
     permutas: PermutaDoc[],
     noteNumber: string
@@ -94,7 +106,7 @@ export class PermutaDocumentService {
     const grupos = agruparPorFuncao(permutas);
     const children: (Paragraph | Table)[] = [];
 
-    // Título principal
+    // Título principal (bold)
     children.push(
       new Paragraph({
         children: [
@@ -103,6 +115,7 @@ export class PermutaDocumentService {
             bold: true,
             size: 24,
             font: 'Arial',
+            color: '000000',
           }),
         ],
         alignment: AlignmentType.CENTER,
@@ -110,17 +123,17 @@ export class PermutaDocumentService {
       })
     );
 
-    // Iterar por cada grupo de função
     for (const [funcao, lista] of grupos) {
-      // Subtítulo da função (ex: "COMANDANTE DO 1º SOCORRO")
+      // Subtítulo da função (SEM negrito)
       children.push(
         new Paragraph({
           children: [
             new TextRun({
               text: funcaoParaTituloDocumento(funcao),
-              bold: true,
+              bold: false,
               size: 24,
               font: 'Arial',
+              color: '000000',
             }),
           ],
           alignment: AlignmentType.CENTER,
@@ -128,20 +141,20 @@ export class PermutaDocumentService {
         })
       );
 
-      // Header row 1: ENTRA (colSpan=3) | SAI (colSpan=2)
+      // Header row 1: ENTRA (colSpan=3) | SAI (colSpan=2) — sem negrito, texto preto, fundo cinza
       const headerRow1 = new TableRow({
         children: [
           new TableCell({
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'ENTRA', bold: true, size: 24, font: 'Arial' }),
+                  new TextRun({ text: 'ENTRA', bold: false, size: 24, font: 'Arial', color: '000000' }),
                 ],
                 alignment: AlignmentType.CENTER,
               }),
             ],
             columnSpan: 3,
-            shading: { type: ShadingType.SOLID, fill: 'D3D3D3' },
+            shading: HEADER_SHADING,
             borders: CELL_BORDER,
             verticalAlign: VerticalAlign.CENTER,
           }),
@@ -149,32 +162,32 @@ export class PermutaDocumentService {
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'SAI', bold: true, size: 24, font: 'Arial' }),
+                  new TextRun({ text: 'SAI', bold: false, size: 24, font: 'Arial', color: '000000' }),
                 ],
                 alignment: AlignmentType.CENTER,
               }),
             ],
             columnSpan: 2,
-            shading: { type: ShadingType.SOLID, fill: 'D3D3D3' },
+            shading: HEADER_SHADING,
             borders: CELL_BORDER,
             verticalAlign: VerticalAlign.CENTER,
           }),
         ],
       });
 
-      // Header row 2: DIA | MILITAR | RG | MILITAR | RG
+      // Header row 2: DIA | MILITAR | RG | MILITAR | RG — sem negrito, texto preto, fundo cinza
       const headerRow2 = new TableRow({
         children: [
           new TableCell({
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'DIA', bold: true, size: 24, font: 'Arial' }),
+                  new TextRun({ text: 'DIA', bold: false, size: 24, font: 'Arial', color: '000000' }),
                 ],
                 alignment: AlignmentType.CENTER,
               }),
             ],
-            shading: { type: ShadingType.SOLID, fill: 'D3D3D3' },
+            shading: HEADER_SHADING,
             borders: CELL_BORDER,
             verticalAlign: VerticalAlign.CENTER,
             width: { size: 12, type: WidthType.PERCENTAGE },
@@ -183,12 +196,12 @@ export class PermutaDocumentService {
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'MILITAR', bold: true, size: 24, font: 'Arial' }),
+                  new TextRun({ text: 'MILITAR', bold: false, size: 24, font: 'Arial', color: '000000' }),
                 ],
                 alignment: AlignmentType.CENTER,
               }),
             ],
-            shading: { type: ShadingType.SOLID, fill: 'D3D3D3' },
+            shading: HEADER_SHADING,
             borders: CELL_BORDER,
             verticalAlign: VerticalAlign.CENTER,
             width: { size: 32, type: WidthType.PERCENTAGE },
@@ -197,12 +210,12 @@ export class PermutaDocumentService {
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'RG', bold: true, size: 24, font: 'Arial' }),
+                  new TextRun({ text: 'RG', bold: false, size: 24, font: 'Arial', color: '000000' }),
                 ],
                 alignment: AlignmentType.CENTER,
               }),
             ],
-            shading: { type: ShadingType.SOLID, fill: 'D3D3D3' },
+            shading: HEADER_SHADING,
             borders: CELL_BORDER,
             verticalAlign: VerticalAlign.CENTER,
             width: { size: 12, type: WidthType.PERCENTAGE },
@@ -211,12 +224,12 @@ export class PermutaDocumentService {
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'MILITAR', bold: true, size: 24, font: 'Arial' }),
+                  new TextRun({ text: 'MILITAR', bold: false, size: 24, font: 'Arial', color: '000000' }),
                 ],
                 alignment: AlignmentType.CENTER,
               }),
             ],
-            shading: { type: ShadingType.SOLID, fill: 'D3D3D3' },
+            shading: HEADER_SHADING,
             borders: CELL_BORDER,
             verticalAlign: VerticalAlign.CENTER,
             width: { size: 32, type: WidthType.PERCENTAGE },
@@ -225,12 +238,12 @@ export class PermutaDocumentService {
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'RG', bold: true, size: 24, font: 'Arial' }),
+                  new TextRun({ text: 'RG', bold: false, size: 24, font: 'Arial', color: '000000' }),
                 ],
                 alignment: AlignmentType.CENTER,
               }),
             ],
-            shading: { type: ShadingType.SOLID, fill: 'D3D3D3' },
+            shading: HEADER_SHADING,
             borders: CELL_BORDER,
             verticalAlign: VerticalAlign.CENTER,
             width: { size: 12, type: WidthType.PERCENTAGE },
@@ -247,11 +260,7 @@ export class PermutaDocumentService {
                 children: [
                   new Paragraph({
                     children: [
-                      new TextRun({
-                        text: formatarDataPtBR(p.data),
-                        size: 24,
-                        font: 'Arial',
-                      }),
+                      new TextRun({ text: formatarDataPtBR(p.data), size: 24, font: 'Arial', color: '000000' }),
                     ],
                     alignment: AlignmentType.CENTER,
                   }),
@@ -263,11 +272,7 @@ export class PermutaDocumentService {
                 children: [
                   new Paragraph({
                     children: [
-                      new TextRun({
-                        text: formatarMilitar(p.militarEntraData),
-                        size: 24,
-                        font: 'Arial',
-                      }),
+                      new TextRun({ text: formatarMilitar(p.militarEntraData), size: 24, font: 'Arial', color: '000000' }),
                     ],
                     alignment: AlignmentType.CENTER,
                   }),
@@ -279,11 +284,7 @@ export class PermutaDocumentService {
                 children: [
                   new Paragraph({
                     children: [
-                      new TextRun({
-                        text: formatarRG(p.militarEntraRg),
-                        size: 24,
-                        font: 'Arial',
-                      }),
+                      new TextRun({ text: formatarRG(p.militarEntraRg), size: 24, font: 'Arial', color: '000000' }),
                     ],
                     alignment: AlignmentType.CENTER,
                   }),
@@ -295,11 +296,7 @@ export class PermutaDocumentService {
                 children: [
                   new Paragraph({
                     children: [
-                      new TextRun({
-                        text: formatarMilitar(p.militarSaiData),
-                        size: 24,
-                        font: 'Arial',
-                      }),
+                      new TextRun({ text: formatarMilitar(p.militarSaiData), size: 24, font: 'Arial', color: '000000' }),
                     ],
                     alignment: AlignmentType.CENTER,
                   }),
@@ -311,11 +308,7 @@ export class PermutaDocumentService {
                 children: [
                   new Paragraph({
                     children: [
-                      new TextRun({
-                        text: formatarRG(p.militarSaiRg),
-                        size: 24,
-                        font: 'Arial',
-                      }),
+                      new TextRun({ text: formatarRG(p.militarSaiRg), size: 24, font: 'Arial', color: '000000' }),
                     ],
                     alignment: AlignmentType.CENTER,
                   }),
@@ -359,31 +352,23 @@ export class PermutaDocumentService {
     });
   }
 
-  /**
-   * Faz upload do documento para Firebase Storage e retorna a URL de download
-   */
   static async uploadDocumento(blob: Blob): Promise<string> {
     const hoje = new Date();
-    const dataStr = hoje.toISOString().split('T')[0]; // YYYY-MM-DD
+    const dataStr = hoje.toISOString().split('T')[0];
     const path = `documentos/permutas/${dataStr}/Escala_Permutas_${dataStr}.docx`;
 
     const storageRef = ref(storage, path);
     const snapshot = await uploadBytes(storageRef, blob, {
       contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    return downloadURL;
+    return await getDownloadURL(snapshot.ref);
   }
 
-  /**
-   * Gera e faz upload do documento, retornando a URL
-   */
   static async gerarEUploadDocumento(
     permutas: PermutaDoc[],
     noteNumber: string
   ): Promise<string> {
     const blob = await this.gerarDocumento(permutas, noteNumber);
-    const url = await this.uploadDocumento(blob);
-    return url;
+    return await this.uploadDocumento(blob);
   }
 }

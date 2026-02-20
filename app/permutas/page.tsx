@@ -921,23 +921,13 @@ export default function PermutasPage() {
                   className="pl-9"
                 />
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={importarDadosIniciais}
-                  disabled={importando}
-                >
-                  {importando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-                  Importar dados iniciais ({MILITARES_PERMUTAS_SEED.length})
-                </Button>
-                <Button
-                  onClick={() => abrirCadastroMilitar('', null)}
-                  className="bg-red-600 hover:bg-red-700 text-white"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Novo militar
-                </Button>
-              </div>
+              <Button
+                onClick={() => abrirCadastroMilitar('', null)}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Novo militar
+              </Button>
             </div>
 
             {/* Stats */}
@@ -1176,127 +1166,214 @@ export default function PermutasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Batch (Lote) Modal */}
+      {/* Batch (Lote) Modal — UI melhorada */}
       <Dialog open={batchOpen} onOpenChange={setBatchOpen}>
-        <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="text-xl">Cadastrar Permutas em Lote</DialogTitle>
-            <DialogDescription>
-              Preencha as linhas abaixo. Ao digitar o RG e sair do campo, o sistema busca automaticamente na base de militares de permutas.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto space-y-4 py-2">
-            {linhas.map((linha, idx) => (
-              <div key={linha.id} className="border rounded-lg p-4 bg-slate-50/50 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-600">Permuta #{idx + 1}</span>
-                  {linhas.length > 1 && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => setLinhas((prev) => prev.filter((l) => l.id !== linha.id))}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Data do serviço</Label>
-                    <Input type="date" value={linha.data} onChange={(e) => updateLinha(linha.id, 'data', e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Função</Label>
-                    <Select value={linha.funcao} onValueChange={(v) => updateLinha(linha.id, 'funcao', v)}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {FUNCOES_PADRAO.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* ENTRA */}
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-emerald-700">ENTRA (militar que assume)</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="RG"
-                        value={linha.rgEntra}
-                        onChange={(e) => updateLinha(linha.id, 'rgEntra', e.target.value)}
-                        onBlur={() => buscarMilitarParaLinha(linha.id, 'entra', linha.rgEntra)}
-                        className="w-32"
-                      />
-                      {linha.loadingEntra && <Loader2 className="h-4 w-4 animate-spin text-slate-400 self-center" />}
-                    </div>
-                    {linha.militarEntra && (
-                      <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-xs">
-                        <span className="font-medium">{formatarMilitarStr(linha.militarEntra)}</span>
-                        <span className="text-slate-500 ml-2">RG {formatarRG(linha.militarEntra.rg)}</span>
-                      </div>
-                    )}
-                    {linha.erroEntra && !linha.militarEntra && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-red-500">{linha.erroEntra}</span>
-                        <Button type="button" variant="outline" size="sm" className="h-6 text-xs" onClick={() => abrirCadastroMilitar(linha.rgEntra, (snap) => { setLinhas((prev) => prev.map((l) => l.id === linha.id ? { ...l, militarEntra: snap, erroEntra: '' } : l)); })}>
-                          <UserPlus className="h-3 w-3 mr-1" /> Cadastrar
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* SAI */}
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-red-700">SAI (militar que deixa o serviço)</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="RG"
-                        value={linha.rgSai}
-                        onChange={(e) => updateLinha(linha.id, 'rgSai', e.target.value)}
-                        onBlur={() => buscarMilitarParaLinha(linha.id, 'sai', linha.rgSai)}
-                        className="w-32"
-                      />
-                      {linha.loadingSai && <Loader2 className="h-4 w-4 animate-spin text-slate-400 self-center" />}
-                    </div>
-                    {linha.militarSai && (
-                      <div className="p-2 bg-red-50 border border-red-200 rounded text-xs">
-                        <span className="font-medium">{formatarMilitarStr(linha.militarSai)}</span>
-                        <span className="text-slate-500 ml-2">RG {formatarRG(linha.militarSai.rg)}</span>
-                      </div>
-                    )}
-                    {linha.erroSai && !linha.militarSai && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-red-500">{linha.erroSai}</span>
-                        <Button type="button" variant="outline" size="sm" className="h-6 text-xs" onClick={() => abrirCadastroMilitar(linha.rgSai, (snap) => { setLinhas((prev) => prev.map((l) => l.id === linha.id ? { ...l, militarSai: snap, erroSai: '' } : l)); })}>
-                          <UserPlus className="h-3 w-3 mr-1" /> Cadastrar
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            <Button variant="outline" onClick={() => setLinhas((prev) => [...prev, criarLinhaVazia()])} className="w-full border-dashed">
-              <Plus className="h-4 w-4 mr-2" /> Adicionar linha
-            </Button>
+        <DialogContent className="sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0">
+          {/* Header fixo */}
+          <div className="px-6 pt-6 pb-4 border-b bg-white flex-shrink-0">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold text-slate-900">Cadastrar Permutas</DialogTitle>
+              <DialogDescription className="text-slate-500">
+                Digite o RG e pressione Tab para buscar automaticamente. Se o militar nao existir, clique em Cadastrar.
+              </DialogDescription>
+            </DialogHeader>
           </div>
 
-          <DialogFooter className="border-t pt-4 flex-shrink-0">
-            <div className="flex items-center justify-between w-full">
-              <span className="text-sm text-slate-500">
-                {linhas.filter((l) => l.data && l.funcao && l.militarEntra && l.militarSai).length} de {linhas.length} linhas válidas
-              </span>
+          {/* Conteudo scrollável */}
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+            {linhas.map((linha, idx) => {
+              const isComplete = !!(linha.data && linha.funcao && linha.militarEntra && linha.militarSai);
+              return (
+                <div
+                  key={linha.id}
+                  className={`rounded-xl border-2 transition-colors ${
+                    isComplete
+                      ? 'border-emerald-200 bg-emerald-50/30'
+                      : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  {/* Linha header com numero e botão remover */}
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        isComplete ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        {isComplete ? <CheckCircle2 className="h-3.5 w-3.5" /> : idx + 1}
+                      </div>
+                      <span className="text-sm font-medium text-slate-700">
+                        Permuta {idx + 1}
+                      </span>
+                    </div>
+                    {linhas.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                        onClick={() => setLinhas((prev) => prev.filter((l) => l.id !== linha.id))}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        <span className="text-xs">Remover</span>
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="p-4 space-y-4">
+                    {/* Linha 1: Data + Função lado a lado */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Data do serviço</Label>
+                        <Input
+                          type="date"
+                          value={linha.data}
+                          onChange={(e) => updateLinha(linha.id, 'data', e.target.value)}
+                          className="h-10"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Função</Label>
+                        <Select value={linha.funcao} onValueChange={(v) => updateLinha(linha.id, 'funcao', v)}>
+                          <SelectTrigger className="w-full h-10"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {FUNCOES_PADRAO.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Linha 2: ENTRA e SAI lado a lado */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* ENTRA */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                          <Label className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Entra</Label>
+                        </div>
+                        <div className="relative">
+                          <Input
+                            placeholder="Digite o RG..."
+                            value={linha.rgEntra}
+                            onChange={(e) => updateLinha(linha.id, 'rgEntra', e.target.value)}
+                            onBlur={() => buscarMilitarParaLinha(linha.id, 'entra', linha.rgEntra)}
+                            className="h-10 pr-8 font-mono"
+                          />
+                          {linha.loadingEntra && (
+                            <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-slate-400" />
+                          )}
+                        </div>
+                        {linha.militarEntra && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-900 truncate">{formatarMilitarStr(linha.militarEntra)}</p>
+                              <p className="text-xs text-slate-500">RG {formatarRG(linha.militarEntra.rg)}{linha.militarEntra.unidade ? ` — ${linha.militarEntra.unidade}` : ''}</p>
+                            </div>
+                          </div>
+                        )}
+                        {linha.erroEntra && !linha.militarEntra && (
+                          <div className="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                            <span className="text-xs text-red-600 font-medium">{linha.erroEntra}</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 text-xs bg-red-600 hover:bg-red-700 text-white"
+                              onClick={() => abrirCadastroMilitar(linha.rgEntra, (snap) => {
+                                setLinhas((prev) => prev.map((l) => l.id === linha.id ? { ...l, militarEntra: snap, erroEntra: '' } : l));
+                              })}
+                            >
+                              <UserPlus className="h-3 w-3 mr-1" /> Cadastrar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SAI */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-red-500" />
+                          <Label className="text-xs font-semibold text-red-700 uppercase tracking-wide">Sai</Label>
+                        </div>
+                        <div className="relative">
+                          <Input
+                            placeholder="Digite o RG..."
+                            value={linha.rgSai}
+                            onChange={(e) => updateLinha(linha.id, 'rgSai', e.target.value)}
+                            onBlur={() => buscarMilitarParaLinha(linha.id, 'sai', linha.rgSai)}
+                            className="h-10 pr-8 font-mono"
+                          />
+                          {linha.loadingSai && (
+                            <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-slate-400" />
+                          )}
+                        </div>
+                        {linha.militarSai && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                            <CheckCircle2 className="h-4 w-4 text-red-500 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-900 truncate">{formatarMilitarStr(linha.militarSai)}</p>
+                              <p className="text-xs text-slate-500">RG {formatarRG(linha.militarSai.rg)}{linha.militarSai.unidade ? ` — ${linha.militarSai.unidade}` : ''}</p>
+                            </div>
+                          </div>
+                        )}
+                        {linha.erroSai && !linha.militarSai && (
+                          <div className="flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                            <span className="text-xs text-red-600 font-medium">{linha.erroSai}</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 text-xs bg-red-600 hover:bg-red-700 text-white"
+                              onClick={() => abrirCadastroMilitar(linha.rgSai, (snap) => {
+                                setLinhas((prev) => prev.map((l) => l.id === linha.id ? { ...l, militarSai: snap, erroSai: '' } : l));
+                              })}
+                            >
+                              <UserPlus className="h-3 w-3 mr-1" /> Cadastrar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Adicionar linha */}
+            <button
+              onClick={() => setLinhas((prev) => [...prev, criarLinhaVazia()])}
+              className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm font-medium text-slate-500 hover:border-red-300 hover:text-red-600 hover:bg-red-50/50 transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar permuta
+            </button>
+          </div>
+
+          {/* Footer fixo */}
+          <div className="px-6 py-4 border-t bg-slate-50 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <span className="text-sm font-medium text-slate-700">
+                    {linhas.filter((l) => l.data && l.funcao && l.militarEntra && l.militarSai).length}
+                  </span>
+                  <span className="text-sm text-slate-400">prontas</span>
+                </div>
+                <span className="text-slate-300">|</span>
+                <span className="text-sm text-slate-400">{linhas.length} total</span>
+              </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setBatchOpen(false)} disabled={salvandoLote}>Cancelar</Button>
+                <Button variant="outline" onClick={() => setBatchOpen(false)} disabled={salvandoLote}>
+                  Cancelar
+                </Button>
                 <Button variant="outline" onClick={() => salvarLote(false)} disabled={salvandoLote}>
-                  {salvandoLote && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Salvar
+                  {salvandoLote && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  Salvar e continuar
                 </Button>
                 <Button onClick={() => salvarLote(true)} disabled={salvandoLote} className="bg-red-600 hover:bg-red-700 text-white">
-                  {salvandoLote && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Salvar e fechar
+                  {salvandoLote && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  Salvar e fechar
                 </Button>
               </div>
             </div>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
