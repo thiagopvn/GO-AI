@@ -14,7 +14,8 @@ import {
   LogOut,
   ChevronLeft,
   Menu,
-  UserCheck
+  UserCheck,
+  ArrowLeftRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -45,6 +46,11 @@ const menuItems = [
     title: 'Sindicâncias',
     icon: Search,
     href: '/sindicancias'
+  },
+  {
+    title: 'Permutas',
+    icon: ArrowLeftRight,
+    href: '/permutas'
   },
   {
     title: 'Relatórios',
