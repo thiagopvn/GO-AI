@@ -14,7 +14,7 @@ import {
 } from 'docx';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase/config';
-import { PermutaDoc, ORDEM_FUNCOES } from '@/types/permutas';
+import { PermutaDoc, ORDEM_FUNCOES, funcaoParaTituloDocumento } from '@/types/permutas';
 
 /**
  * Formata RG com ponto: "12345678" -> "12345.678"
@@ -112,12 +112,12 @@ export class PermutaDocumentService {
 
     // Iterar por cada grupo de função
     for (const [funcao, lista] of grupos) {
-      // Subtítulo da função
+      // Subtítulo da função (ex: "COMANDANTE DO 1º SOCORRO")
       children.push(
         new Paragraph({
           children: [
             new TextRun({
-              text: funcao.toUpperCase(),
+              text: funcaoParaTituloDocumento(funcao),
               bold: true,
               size: 24,
               font: 'Arial',

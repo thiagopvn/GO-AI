@@ -17,12 +17,36 @@ export const ORDEM_FUNCOES: string[] = [
   'OFICIAL DE DIA AO QCG',
 ];
 
+// Mapeamento de função para título no documento Word
+export function funcaoParaTituloDocumento(funcao: string): string {
+  switch (funcao) {
+    case '1º SOCORRO':
+      return 'COMANDANTE DO 1º SOCORRO';
+    case '2º SOCORRO':
+      return 'COMANDANTE DO 2º SOCORRO';
+    default:
+      return funcao;
+  }
+}
+
 export interface MilitarSnapshot {
   rg: string;
   nome: string;
   grad: string;       // patente / graduação
   quadro: string;     // ex: "QOC", "QPE", etc.
   unidade?: string;
+}
+
+// Militar específico de permutas (coleção separada: militares_permutas)
+export interface MilitarPermuta {
+  id: string;
+  rg: string;
+  grad: string;       // "1° TEN", "CAP", "2° TEN"
+  quadro: string;     // "QOA", "QOC", "QOE/COM", etc.
+  nome: string;
+  unidade: string;
+  criadoEm: string;
+  atualizadoEm: string;
 }
 
 export interface PermutaDoc {

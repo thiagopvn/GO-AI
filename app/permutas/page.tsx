@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -46,14 +47,22 @@ import {
   ArrowUpDown,
   CheckCircle2,
   UserPlus,
+  Users,
+  Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { PermutaService } from '@/lib/services/PermutaService';
 import { PermutaDocumentService } from '@/lib/services/PermutaDocumentService';
-import { MilitarService } from '@/lib/services/MilitarService';
-import { PermutaDoc, PermutaInput, FUNCOES_PADRAO, MilitarSnapshot } from '@/types/permutas';
-import { Patente } from '@/types';
+import { MilitarPermutaService } from '@/lib/services/MilitarPermutaService';
+import { MILITARES_PERMUTAS_SEED } from '@/lib/data/militares-permutas-seed';
+import {
+  PermutaDoc,
+  PermutaInput,
+  FUNCOES_PADRAO,
+  MilitarSnapshot,
+  MilitarPermuta,
+} from '@/types/permutas';
 
 // ============================================================
 // Helpers
@@ -81,7 +90,7 @@ function formatarDataPtBR(dataISO: string): string {
 // ============================================================
 
 interface LinhaPermuta {
-  id: string; // transient key
+  id: string;
   data: string;
   funcao: string;
   rgEntra: string;
@@ -110,10 +119,17 @@ function criarLinhaVazia(): LinhaPermuta {
   };
 }
 
-// ============================================================
-// Status filter type
-// ============================================================
 type StatusFiltro = 'a_enviar' | 'enviadas' | 'arquivadas' | 'todas';
+
+// Graduações disponíveis para cadastro
+const GRADUACOES = [
+  'CEL', 'TEN CEL', 'MAJ', 'CAP',
+  '1° TEN', '2° TEN', 'ASP',
+  'ST', '1° SGT', '2° SGT', '3° SGT',
+  'CB', 'SD',
+];
+
+const QUADROS = ['QOC', 'QOA', 'QPE', 'QPC', 'QPM', 'QOE', 'QOE/COM', 'QOE/MUS', 'QOBM', 'QOPM'];
 
 // ============================================================
 // MAIN PAGE
@@ -121,50 +137,59 @@ type StatusFiltro = 'a_enviar' | 'enviadas' | 'arquivadas' | 'todas';
 
 export default function PermutasPage() {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('permutas');
 
-  // ---- Data State ----
+  // ============================
+  // PERMUTAS STATE
+  // ============================
   const [permutas, setPermutas] = useState<PermutaDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  // ---- Filter State ----
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>('a_enviar');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
-  // ---- Batch Modal State ----
+  // Batch Modal
   const [batchOpen, setBatchOpen] = useState(false);
   const [linhas, setLinhas] = useState<LinhaPermuta[]>([criarLinhaVazia()]);
   const [salvandoLote, setSalvandoLote] = useState(false);
 
-  // ---- Edit Modal State ----
+  // Edit Modal
   const [editOpen, setEditOpen] = useState(false);
   const [editPermuta, setEditPermuta] = useState<PermutaDoc | null>(null);
   const [editData, setEditData] = useState('');
   const [editFuncao, setEditFuncao] = useState('');
   const [editSalvando, setEditSalvando] = useState(false);
 
-  // ---- Cadastrar Militar Modal State ----
+  // Cadastrar Militar Modal (usado tanto na aba permutas quanto militares)
   const [cadastroMilitarOpen, setCadastroMilitarOpen] = useState(false);
   const [novoMilitarRg, setNovoMilitarRg] = useState('');
   const [novoMilitarNome, setNovoMilitarNome] = useState('');
-  const [novoMilitarPatente, setNovoMilitarPatente] = useState('');
-  const [novoMilitarQuadro, setNovoMilitarQuadro] = useState('');
+  const [novoMilitarGrad, setNovoMilitarGrad] = useState('CAP');
+  const [novoMilitarQuadro, setNovoMilitarQuadro] = useState('QOC');
   const [novoMilitarUnidade, setNovoMilitarUnidade] = useState('');
   const [salvandoMilitar, setSalvandoMilitar] = useState(false);
+  const [editandoMilitarId, setEditandoMilitarId] = useState<string | null>(null);
   const cadastroCallbackRef = useRef<((snap: MilitarSnapshot) => void) | null>(null);
 
-  // ---- Nota (Document Gen) Modal State ----
+  // Nota / Doc Generation Modal
   const [notaModalOpen, setNotaModalOpen] = useState(false);
   const [notaNumero, setNotaNumero] = useState('');
   const [gerandoDoc, setGerandoDoc] = useState(false);
   const [docUrl, setDocUrl] = useState('');
   const [docPermutas, setDocPermutas] = useState<PermutaDoc[]>([]);
 
-  // ---- Action loading ----
   const [actionLoading, setActionLoading] = useState(false);
+
+  // ============================
+  // MILITARES STATE
+  // ============================
+  const [militares, setMilitares] = useState<MilitarPermuta[]>([]);
+  const [militaresLoading, setMilitaresLoading] = useState(false);
+  const [militaresSearch, setMilitaresSearch] = useState('');
+  const [importando, setImportando] = useState(false);
 
   // ============================================================
   // Fetch permutas
@@ -209,6 +234,45 @@ export default function PermutasPage() {
   }, [fetchPermutas]);
 
   // ============================================================
+  // Fetch militares
+  // ============================================================
+  const fetchMilitares = useCallback(async () => {
+    setMilitaresLoading(true);
+    try {
+      const result = await MilitarPermutaService.listarTodos();
+      setMilitares(result);
+    } catch (error) {
+      console.error('Erro ao carregar militares:', error);
+      toast.error('Erro ao carregar militares de permutas');
+    } finally {
+      setMilitaresLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'militares') {
+      fetchMilitares();
+    }
+  }, [activeTab, fetchMilitares]);
+
+  // ============================================================
+  // Import seed data
+  // ============================================================
+  const importarDadosIniciais = async () => {
+    setImportando(true);
+    try {
+      const count = await MilitarPermutaService.importarEmLote(MILITARES_PERMUTAS_SEED);
+      toast.success(`${count} militares importados com sucesso`);
+      fetchMilitares();
+    } catch (error) {
+      console.error('Erro ao importar:', error);
+      toast.error('Erro ao importar militares');
+    } finally {
+      setImportando(false);
+    }
+  };
+
+  // ============================================================
   // Selection helpers
   // ============================================================
   const toggleSelect = (id: string) => {
@@ -231,7 +295,7 @@ export default function PermutasPage() {
   const selectedPermutas = permutas.filter((p) => selectedIds.has(p.id));
 
   // ============================================================
-  // Buscar militar por RG (para batch form)
+  // Buscar militar por RG (usa coleção militares_permutas)
   // ============================================================
   const buscarMilitarParaLinha = async (
     linhaId: string,
@@ -254,13 +318,13 @@ export default function PermutasPage() {
     );
 
     try {
-      const militar = await MilitarService.buscarPorRG(rgLimpo);
+      const militar = await MilitarPermutaService.buscarPorRG(rgLimpo);
       if (militar) {
         const snap: MilitarSnapshot = {
-          rg: militar.rg || rgLimpo,
+          rg: militar.rg,
           nome: militar.nome,
-          grad: militar.patente || militar.postoGraduacao || '',
-          quadro: ((militar as unknown as Record<string, unknown>).quadro as string) || 'QPE',
+          grad: militar.grad,
+          quadro: militar.quadro,
           unidade: militar.unidade,
         };
         setLinhas((prev) =>
@@ -270,6 +334,7 @@ export default function PermutasPage() {
                   ...l,
                   [campo === 'entra' ? 'militarEntra' : 'militarSai']: snap,
                   [campo === 'entra' ? 'loadingEntra' : 'loadingSai']: false,
+                  [campo === 'entra' ? 'erroEntra' : 'erroSai']: '',
                 }
               : l
           )
@@ -304,19 +369,31 @@ export default function PermutasPage() {
   };
 
   // ============================================================
-  // Abrir modal de cadastro de militar
+  // Cadastrar / Editar militar (coleção militares_permutas)
   // ============================================================
-  const abrirCadastroMilitar = (rg: string, callback: (snap: MilitarSnapshot) => void) => {
+  const abrirCadastroMilitar = (rg: string, callback: ((snap: MilitarSnapshot) => void) | null) => {
+    setEditandoMilitarId(null);
     setNovoMilitarRg(rg.replace(/\D/g, ''));
     setNovoMilitarNome('');
-    setNovoMilitarPatente('Soldado');
-    setNovoMilitarQuadro('QPE');
+    setNovoMilitarGrad('CAP');
+    setNovoMilitarQuadro('QOC');
     setNovoMilitarUnidade('');
     cadastroCallbackRef.current = callback;
     setCadastroMilitarOpen(true);
   };
 
-  const salvarNovoMilitar = async () => {
+  const abrirEditarMilitar = (m: MilitarPermuta) => {
+    setEditandoMilitarId(m.id);
+    setNovoMilitarRg(m.rg);
+    setNovoMilitarNome(m.nome);
+    setNovoMilitarGrad(m.grad);
+    setNovoMilitarQuadro(m.quadro);
+    setNovoMilitarUnidade(m.unidade);
+    cadastroCallbackRef.current = null;
+    setCadastroMilitarOpen(true);
+  };
+
+  const salvarMilitar = async () => {
     if (!novoMilitarNome.trim() || !novoMilitarRg.trim()) {
       toast.error('Preencha nome e RG');
       return;
@@ -324,31 +401,51 @@ export default function PermutasPage() {
 
     setSalvandoMilitar(true);
     try {
-      await MilitarService.criarMilitar({
+      const dados = {
         rg: novoMilitarRg.replace(/\D/g, ''),
         nome: novoMilitarNome.trim().toUpperCase(),
-        patente: novoMilitarPatente,
-        matricula: '',
-        unidade: novoMilitarUnidade.trim() || undefined,
-      });
-
-      const snap: MilitarSnapshot = {
-        rg: novoMilitarRg.replace(/\D/g, ''),
-        nome: novoMilitarNome.trim().toUpperCase(),
-        grad: novoMilitarPatente,
+        grad: novoMilitarGrad,
         quadro: novoMilitarQuadro,
-        unidade: novoMilitarUnidade.trim() || undefined,
+        unidade: novoMilitarUnidade.trim().toUpperCase(),
       };
 
-      toast.success('Militar cadastrado com sucesso');
+      if (editandoMilitarId) {
+        await MilitarPermutaService.atualizar(editandoMilitarId, dados);
+        toast.success('Militar atualizado');
+      } else {
+        await MilitarPermutaService.criar(dados);
+        toast.success('Militar cadastrado');
+      }
+
+      const snap: MilitarSnapshot = {
+        rg: dados.rg,
+        nome: dados.nome,
+        grad: dados.grad,
+        quadro: dados.quadro,
+        unidade: dados.unidade,
+      };
+
       setCadastroMilitarOpen(false);
       cadastroCallbackRef.current?.(snap);
       cadastroCallbackRef.current = null;
+
+      if (activeTab === 'militares') fetchMilitares();
     } catch (error) {
-      console.error('Erro ao cadastrar militar:', error);
-      toast.error('Erro ao cadastrar militar');
+      console.error('Erro ao salvar militar:', error);
+      toast.error('Erro ao salvar militar');
     } finally {
       setSalvandoMilitar(false);
+    }
+  };
+
+  const excluirMilitar = async (id: string) => {
+    try {
+      await MilitarPermutaService.excluir(id);
+      toast.success('Militar excluído');
+      fetchMilitares();
+    } catch (error) {
+      console.error('Erro ao excluir militar:', error);
+      toast.error('Erro ao excluir militar');
     }
   };
 
@@ -356,13 +453,12 @@ export default function PermutasPage() {
   // Salvar lote
   // ============================================================
   const salvarLote = async (fecharModal: boolean) => {
-    // Validar
     const linhasValidas = linhas.filter(
       (l) => l.data && l.funcao && l.militarEntra && l.militarSai
     );
 
     if (linhasValidas.length === 0) {
-      toast.error('Nenhuma linha válida para salvar. Preencha todos os campos obrigatórios.');
+      toast.error('Nenhuma linha válida. Preencha todos os campos obrigatórios.');
       return;
     }
 
@@ -378,13 +474,12 @@ export default function PermutasPage() {
       }));
 
       await PermutaService.criarPermutasEmLote(inputs, user?.uid || '');
-      toast.success(`${linhasValidas.length} permuta(s) cadastrada(s) com sucesso`);
+      toast.success(`${linhasValidas.length} permuta(s) cadastrada(s)`);
 
       if (fecharModal) {
         setBatchOpen(false);
         setLinhas([criarLinhaVazia()]);
       } else {
-        // Remove linhas salvas, mantém as inválidas, adiciona uma nova vazia
         const linhasRestantes = linhas.filter(
           (l) => !(l.data && l.funcao && l.militarEntra && l.militarSai)
         );
@@ -440,7 +535,7 @@ export default function PermutasPage() {
       setSelectedIds(new Set());
       fetchPermutas();
     } catch (error) {
-      console.error('Erro ao marcar como enviadas:', error);
+      console.error(error);
       toast.error('Erro ao marcar como enviadas');
     } finally {
       setActionLoading(false);
@@ -455,7 +550,7 @@ export default function PermutasPage() {
       setSelectedIds(new Set());
       fetchPermutas();
     } catch (error) {
-      console.error('Erro ao arquivar:', error);
+      console.error(error);
       toast.error('Erro ao arquivar');
     } finally {
       setActionLoading(false);
@@ -470,7 +565,7 @@ export default function PermutasPage() {
       setSelectedIds(new Set());
       fetchPermutas();
     } catch (error) {
-      console.error('Erro ao desarquivar:', error);
+      console.error(error);
       toast.error('Erro ao desarquivar');
     } finally {
       setActionLoading(false);
@@ -501,20 +596,13 @@ export default function PermutasPage() {
     setGerandoDoc(true);
 
     try {
-      const url = await PermutaDocumentService.gerarEUploadDocumento(
-        docPermutas,
-        noteNumber
-      );
+      const url = await PermutaDocumentService.gerarEUploadDocumento(docPermutas, noteNumber);
       setDocUrl(url);
       toast.success('Documento gerado com sucesso!');
 
-      // Atualizar as permutas com a URL do documento
       for (const p of docPermutas) {
         await PermutaService.atualizarPermuta(p.id, {
-          documentoGerado: {
-            url,
-            geradoEm: new Date().toISOString(),
-          },
+          documentoGerado: { url, geradoEm: new Date().toISOString() },
         } as Partial<PermutaDoc>);
       }
 
@@ -527,29 +615,25 @@ export default function PermutasPage() {
     }
   };
 
-  // ============================================================
-  // Baixar documento localmente (sem upload)
-  // ============================================================
   const baixarDocLocal = async (permutasParaDoc: PermutaDoc[], noteNumber: string) => {
     try {
       const blob = await PermutaDocumentService.gerarDocumento(permutasParaDoc, noteNumber);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const dataStr = new Date().toISOString().split('T')[0];
-      a.download = `Escala_Permutas_${dataStr}.docx`;
+      a.download = `Escala_Permutas_${new Date().toISOString().split('T')[0]}.docx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Erro ao baixar documento:', error);
+      console.error(error);
       toast.error('Erro ao baixar documento');
     }
   };
 
   // ============================================================
-  // Update a batch form line field
+  // Batch line helpers
   // ============================================================
   const updateLinha = (linhaId: string, campo: keyof LinhaPermuta, valor: unknown) => {
     setLinhas((prev) =>
@@ -558,11 +642,26 @@ export default function PermutasPage() {
   };
 
   // ============================================================
+  // Filtered militares
+  // ============================================================
+  const militaresFiltrados = militaresSearch.trim()
+    ? militares.filter((m) => {
+        const s = militaresSearch.toLowerCase();
+        return (
+          m.nome.toLowerCase().includes(s) ||
+          m.rg.includes(militaresSearch.replace(/\D/g, '')) ||
+          m.unidade.toLowerCase().includes(s) ||
+          m.quadro.toLowerCase().includes(s)
+        );
+      })
+    : militares;
+
+  // ============================================================
   // RENDER
   // ============================================================
   return (
     <div className="space-y-6">
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Permutas</h1>
@@ -570,617 +669,546 @@ export default function PermutasPage() {
             Gerenciamento de permutas de serviço
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setLinhas([criarLinhaVazia()]);
-            setBatchOpen(true);
-          }}
-          className="bg-red-600 hover:bg-red-700 text-white"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Nova permuta (lote)
-        </Button>
       </div>
 
-      {/* ── Filters ── */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col gap-4">
-            {/* Status tabs + search */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-                {([
-                  { value: 'a_enviar', label: 'A enviar' },
-                  { value: 'enviadas', label: 'Enviadas' },
-                  { value: 'arquivadas', label: 'Arquivadas' },
-                  { value: 'todas', label: 'Todas' },
-                ] as { value: StatusFiltro; label: string }[]).map((tab) => (
-                  <button
-                    key={tab.value}
-                    onClick={() => {
-                      setStatusFiltro(tab.value);
-                      setSelectedIds(new Set());
-                    }}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                      statusFiltro === tab.value
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="permutas" className="gap-2">
+            <ArrowUpDown className="h-4 w-4" />
+            Permutas
+          </TabsTrigger>
+          <TabsTrigger value="militares" className="gap-2">
+            <Users className="h-4 w-4" />
+            Militares
+          </TabsTrigger>
+        </TabsList>
 
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1 sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    placeholder="Buscar por RG ou nome..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9"
-                  />
+        {/* ============================================================ */}
+        {/* TAB: PERMUTAS */}
+        {/* ============================================================ */}
+        <TabsContent value="permutas">
+          <div className="space-y-4">
+            {/* Action bar */}
+            <div className="flex justify-end">
+              <Button
+                onClick={() => { setLinhas([criarLinhaVazia()]); setBatchOpen(true); }}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nova permuta (lote)
+              </Button>
+            </div>
+
+            {/* Filters */}
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                      {([
+                        { value: 'a_enviar', label: 'A enviar' },
+                        { value: 'enviadas', label: 'Enviadas' },
+                        { value: 'arquivadas', label: 'Arquivadas' },
+                        { value: 'todas', label: 'Todas' },
+                      ] as { value: StatusFiltro; label: string }[]).map((tab) => (
+                        <button
+                          key={tab.value}
+                          onClick={() => { setStatusFiltro(tab.value); setSelectedIds(new Set()); }}
+                          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                            statusFiltro === tab.value
+                              ? 'bg-white text-slate-900 shadow-sm'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1 sm:w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Input
+                          placeholder="Buscar por RG ou nome..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={showFilters ? 'bg-slate-100' : ''}
+                      >
+                        <Filter className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {showFilters && (
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end border-t pt-4">
+                      <div className="flex-1">
+                        <Label className="text-xs text-slate-500">Data inicial</Label>
+                        <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                      </div>
+                      <div className="flex-1">
+                        <Label className="text-xs text-slate-500">Data final</Label>
+                        <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => { setDateFrom(''); setDateTo(''); setSearchTerm(''); }}>
+                        <X className="h-4 w-4 mr-1" /> Limpar
+                      </Button>
+                    </div>
+                  )}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Bulk Actions */}
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                <span className="text-sm font-medium text-red-800">
+                  {selectedIds.size} selecionada(s)
+                </span>
+                <div className="flex gap-2 ml-auto flex-wrap">
+                  <Button size="sm" variant="outline" onClick={() => abrirGerarDocumento(selectedPermutas)} disabled={actionLoading}>
+                    <FileDown className="h-4 w-4 mr-1" /> Gerar Documento
+                  </Button>
+                  {statusFiltro !== 'enviadas' && (
+                    <Button size="sm" variant="outline" onClick={() => marcarComoEnviadas([...selectedIds])} disabled={actionLoading}>
+                      <Send className="h-4 w-4 mr-1" /> Marcar como Enviadas
+                    </Button>
+                  )}
+                  {statusFiltro !== 'arquivadas' ? (
+                    <Button size="sm" variant="outline" onClick={() => arquivarPermutas([...selectedIds])} disabled={actionLoading}>
+                      <Archive className="h-4 w-4 mr-1" /> Arquivar
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => desarquivarPermutas([...selectedIds])} disabled={actionLoading}>
+                      <ArchiveRestore className="h-4 w-4 mr-1" /> Desarquivar
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Table */}
+            <Card>
+              <CardContent className="p-0">
+                {loading ? (
+                  <div className="flex items-center justify-center py-20">
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                  </div>
+                ) : permutas.length === 0 ? (
+                  <div className="text-center py-20 text-slate-400">
+                    <ArrowUpDown className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                    <p className="text-lg font-medium">Nenhuma permuta encontrada</p>
+                    <p className="text-sm mt-1">Ajuste os filtros ou cadastre novas permutas</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-slate-50">
+                          <th className="px-4 py-3 text-left w-10">
+                            <Checkbox
+                              checked={selectedIds.size === permutas.length && permutas.length > 0}
+                              onCheckedChange={toggleSelectAll}
+                            />
+                          </th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Data</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Função</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Entra</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Sai</th>
+                          <th className="px-4 py-3 text-center font-medium text-slate-600">Status</th>
+                          <th className="px-4 py-3 text-right font-medium text-slate-600">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {permutas.map((p) => (
+                          <tr
+                            key={p.id}
+                            className={`border-b last:border-b-0 hover:bg-slate-50 transition-colors ${selectedIds.has(p.id) ? 'bg-red-50/50' : ''}`}
+                          >
+                            <td className="px-4 py-3">
+                              <Checkbox checked={selectedIds.has(p.id)} onCheckedChange={() => toggleSelect(p.id)} />
+                            </td>
+                            <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap">
+                              {formatarDataPtBR(p.data)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{p.funcao}</td>
+                            <td className="px-4 py-3">
+                              <div className="text-slate-900 font-medium">{formatarMilitarStr(p.militarEntraData)}</div>
+                              <div className="text-xs text-slate-500">RG {formatarRG(p.militarEntraRg)}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="text-slate-900 font-medium">{formatarMilitarStr(p.militarSaiData)}</div>
+                              <div className="text-xs text-slate-500">RG {formatarRG(p.militarSaiRg)}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center gap-1.5">
+                                {p.enviada ? (
+                                  <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
+                                    <CheckCircle2 className="h-3 w-3 mr-1" /> Enviada
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs">A enviar</Badge>
+                                )}
+                                {p.arquivada && (
+                                  <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-xs">
+                                    <Archive className="h-3 w-3 mr-1" /> Arquivada
+                                  </Badge>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => openEdit(p)}>
+                                    <Edit2 className="h-4 w-4 mr-2" /> Editar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => abrirGerarDocumento([p])}>
+                                    <FileDown className="h-4 w-4 mr-2" /> Gerar Word
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  {!p.enviada && (
+                                    <DropdownMenuItem onClick={() => marcarComoEnviadas([p.id])}>
+                                      <Send className="h-4 w-4 mr-2" /> Marcar enviada
+                                    </DropdownMenuItem>
+                                  )}
+                                  {!p.arquivada ? (
+                                    <DropdownMenuItem onClick={() => arquivarPermutas([p.id])}>
+                                      <Archive className="h-4 w-4 mr-2" /> Arquivar
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem onClick={() => desarquivarPermutas([p.id])}>
+                                      <ArchiveRestore className="h-4 w-4 mr-2" /> Desarquivar
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ============================================================ */}
+        {/* TAB: MILITARES */}
+        {/* ============================================================ */}
+        <TabsContent value="militares">
+          <div className="space-y-4">
+            {/* Header + Actions */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative flex-1 sm:max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Buscar por nome, RG, quadro ou unidade..."
+                  value={militaresSearch}
+                  onChange={(e) => setMilitaresSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  size="icon"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={showFilters ? 'bg-slate-100' : ''}
+                  onClick={importarDadosIniciais}
+                  disabled={importando}
                 >
-                  <Filter className="h-4 w-4" />
+                  {importando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                  Importar dados iniciais ({MILITARES_PERMUTAS_SEED.length})
                 </Button>
-              </div>
-            </div>
-
-            {/* Advanced filters */}
-            {showFilters && (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end border-t pt-4">
-                <div className="flex-1">
-                  <Label className="text-xs text-slate-500">Data inicial</Label>
-                  <Input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                  />
-                </div>
-                <div className="flex-1">
-                  <Label className="text-xs text-slate-500">Data final</Label>
-                  <Input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                  />
-                </div>
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setDateFrom('');
-                    setDateTo('');
-                    setSearchTerm('');
-                  }}
+                  onClick={() => abrirCadastroMilitar('', null)}
+                  className="bg-red-600 hover:bg-red-700 text-white"
                 >
-                  <X className="h-4 w-4 mr-1" /> Limpar
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Novo militar
                 </Button>
               </div>
-            )}
+            </div>
+
+            {/* Stats */}
+            <div className="flex items-center gap-4 text-sm text-slate-500">
+              <span>{militares.length} militares cadastrados</span>
+              {militaresSearch && <span>{militaresFiltrados.length} encontrado(s)</span>}
+            </div>
+
+            {/* Table */}
+            <Card>
+              <CardContent className="p-0">
+                {militaresLoading ? (
+                  <div className="flex items-center justify-center py-20">
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                  </div>
+                ) : militaresFiltrados.length === 0 ? (
+                  <div className="text-center py-20 text-slate-400">
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                    <p className="text-lg font-medium">
+                      {militares.length === 0 ? 'Nenhum militar cadastrado' : 'Nenhum resultado encontrado'}
+                    </p>
+                    {militares.length === 0 && (
+                      <p className="text-sm mt-1">
+                        Clique em &quot;Importar dados iniciais&quot; para carregar a lista ou cadastre manualmente
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-slate-50">
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">RG</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Graduação</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Quadro</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Nome</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Unidade</th>
+                          <th className="px-4 py-3 text-right font-medium text-slate-600">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {militaresFiltrados.map((m) => (
+                          <tr key={m.id} className="border-b last:border-b-0 hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3 font-mono text-slate-900">{formatarRG(m.rg)}</td>
+                            <td className="px-4 py-3 text-slate-700">{m.grad}</td>
+                            <td className="px-4 py-3">
+                              <Badge variant="outline" className="text-xs">{m.quadro}</Badge>
+                            </td>
+                            <td className="px-4 py-3 font-medium text-slate-900">{m.nome}</td>
+                            <td className="px-4 py-3 text-slate-600">{m.unidade}</td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => abrirEditarMilitar(m)}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-red-500 hover:text-red-700"
+                                  onClick={() => excluirMilitar(m.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+        </TabsContent>
+      </Tabs>
 
-      {/* ── Bulk Actions Bar ── */}
-      {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-          <span className="text-sm font-medium text-red-800">
-            {selectedIds.size} selecionada(s)
-          </span>
-          <div className="flex gap-2 ml-auto">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => abrirGerarDocumento(selectedPermutas)}
-              disabled={actionLoading}
-            >
-              <FileDown className="h-4 w-4 mr-1" />
-              Gerar Documento
-            </Button>
-            {statusFiltro !== 'enviadas' && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => marcarComoEnviadas([...selectedIds])}
-                disabled={actionLoading}
-              >
-                <Send className="h-4 w-4 mr-1" />
-                Marcar como Enviadas
-              </Button>
-            )}
-            {statusFiltro !== 'arquivadas' ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => arquivarPermutas([...selectedIds])}
-                disabled={actionLoading}
-              >
-                <Archive className="h-4 w-4 mr-1" />
-                Arquivar
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => desarquivarPermutas([...selectedIds])}
-                disabled={actionLoading}
-              >
-                <ArchiveRestore className="h-4 w-4 mr-1" />
-                Desarquivar
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* ============================================================ */}
+      {/* MODALS */}
+      {/* ============================================================ */}
 
-      {/* ── Table ── */}
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-            </div>
-          ) : permutas.length === 0 ? (
-            <div className="text-center py-20 text-slate-400">
-              <ArrowUpDown className="h-12 w-12 mx-auto mb-4 opacity-40" />
-              <p className="text-lg font-medium">Nenhuma permuta encontrada</p>
-              <p className="text-sm mt-1">Ajuste os filtros ou cadastre novas permutas</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-slate-50">
-                    <th className="px-4 py-3 text-left w-10">
-                      <Checkbox
-                        checked={selectedIds.size === permutas.length && permutas.length > 0}
-                        onCheckedChange={toggleSelectAll}
-                      />
-                    </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600">Data</th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600">Função</th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600">Entra</th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-600">Sai</th>
-                    <th className="px-4 py-3 text-center font-medium text-slate-600">Status</th>
-                    <th className="px-4 py-3 text-right font-medium text-slate-600">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {permutas.map((p) => (
-                    <tr
-                      key={p.id}
-                      className={`border-b last:border-b-0 hover:bg-slate-50 transition-colors ${
-                        selectedIds.has(p.id) ? 'bg-red-50/50' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-3">
-                        <Checkbox
-                          checked={selectedIds.has(p.id)}
-                          onCheckedChange={() => toggleSelect(p.id)}
-                        />
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap">
-                        {formatarDataPtBR(p.data)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
-                        {p.funcao}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-slate-900 font-medium">
-                          {formatarMilitarStr(p.militarEntraData)}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          RG {formatarRG(p.militarEntraRg)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-slate-900 font-medium">
-                          {formatarMilitarStr(p.militarSaiData)}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          RG {formatarRG(p.militarSaiRg)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {p.enviada ? (
-                            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Enviada
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs">
-                              A enviar
-                            </Badge>
-                          )}
-                          {p.arquivada && (
-                            <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-xs">
-                              <Archive className="h-3 w-3 mr-1" />
-                              Arquivada
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openEdit(p)}>
-                              <Edit2 className="h-4 w-4 mr-2" /> Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => abrirGerarDocumento([p])}
-                            >
-                              <FileDown className="h-4 w-4 mr-2" /> Gerar Word
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {!p.enviada && (
-                              <DropdownMenuItem
-                                onClick={() => marcarComoEnviadas([p.id])}
-                              >
-                                <Send className="h-4 w-4 mr-2" /> Marcar enviada
-                              </DropdownMenuItem>
-                            )}
-                            {!p.arquivada ? (
-                              <DropdownMenuItem
-                                onClick={() => arquivarPermutas([p.id])}
-                              >
-                                <Archive className="h-4 w-4 mr-2" /> Arquivar
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem
-                                onClick={() => desarquivarPermutas([p.id])}
-                              >
-                                <ArchiveRestore className="h-4 w-4 mr-2" /> Desarquivar
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Nota Modal (para gerar documento) ── */}
+      {/* Nota Modal (gerar documento) */}
       <Dialog open={notaModalOpen} onOpenChange={setNotaModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-xl">Gerar Documento de Permutas</DialogTitle>
             <DialogDescription>
-              Informe o número da nota para gerar o documento Word.
-              Será gerado com {docPermutas.length} permuta(s) selecionada(s).
+              Informe o número da nota para gerar o documento Word com {docPermutas.length} permuta(s).
             </DialogDescription>
           </DialogHeader>
-
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="nota-numero" className="font-medium">
-                Número da Nota
-              </Label>
+              <Label htmlFor="nota-numero" className="font-medium">Número da Nota</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id="nota-numero"
-                  placeholder="Ex: 001"
+                  placeholder="Ex: 149"
                   value={notaNumero}
                   onChange={(e) => setNotaNumero(e.target.value)}
                   className="flex-1"
                   autoFocus
                 />
-                <span className="text-sm text-slate-500 whitespace-nowrap">
-                  / {new Date().getFullYear()}
-                </span>
+                <span className="text-sm text-slate-500 whitespace-nowrap">/ {new Date().getFullYear()}</span>
               </div>
-              <p className="text-xs text-slate-400">
-                O número da nota aparecerá no título do documento
-              </p>
+              <p className="text-xs text-slate-400">Ex: NOTA GOCG 149/{new Date().getFullYear()}</p>
             </div>
-
             {docUrl && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                <p className="text-sm text-emerald-800 font-medium mb-2">
-                  Documento gerado com sucesso!
-                </p>
+                <p className="text-sm text-emerald-800 font-medium mb-2">Documento gerado com sucesso!</p>
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => window.open(docUrl, '_blank')}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  >
-                    <Download className="h-4 w-4 mr-1" />
-                    Baixar Word
+                  <Button size="sm" onClick={() => window.open(docUrl, '_blank')} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                    <Download className="h-4 w-4 mr-1" /> Baixar Word
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      baixarDocLocal(
-                        docPermutas,
-                        `${notaNumero.trim()}/${new Date().getFullYear()}`
-                      )
-                    }
-                  >
-                    <FileDown className="h-4 w-4 mr-1" />
-                    Download direto
+                  <Button size="sm" variant="outline" onClick={() => baixarDocLocal(docPermutas, `${notaNumero.trim()}/${new Date().getFullYear()}`)}>
+                    <FileDown className="h-4 w-4 mr-1" /> Download direto
                   </Button>
                 </div>
               </div>
             )}
           </div>
-
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setNotaModalOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setNotaModalOpen(false)}>
               {docUrl ? 'Fechar' : 'Cancelar'}
             </Button>
             {!docUrl && (
-              <Button
-                onClick={gerarDocumento}
-                disabled={gerandoDoc || !notaNumero.trim()}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                {gerandoDoc ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Gerando...
-                  </>
-                ) : (
-                  <>
-                    <FileDown className="h-4 w-4 mr-2" />
-                    Gerar Documento
-                  </>
-                )}
+              <Button onClick={gerarDocumento} disabled={gerandoDoc || !notaNumero.trim()} className="bg-red-600 hover:bg-red-700 text-white">
+                {gerandoDoc ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Gerando...</> : <><FileDown className="h-4 w-4 mr-2" /> Gerar Documento</>}
               </Button>
             )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Edit Modal ── */}
+      {/* Edit Permuta Modal */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Editar Permuta</DialogTitle>
-            <DialogDescription>Altere os dados da permuta selecionada.</DialogDescription>
+            <DialogDescription>Altere os dados da permuta.</DialogDescription>
           </DialogHeader>
           {editPermuta && (
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>Data do serviço</Label>
-                <Input
-                  type="date"
-                  value={editData}
-                  onChange={(e) => setEditData(e.target.value)}
-                />
+                <Input type="date" value={editData} onChange={(e) => setEditData(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Função</Label>
                 <Select value={editFuncao} onValueChange={setEditFuncao}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {FUNCOES_PADRAO.map((f) => (
-                      <SelectItem key={f} value={f}>
-                        {f}
-                      </SelectItem>
-                    ))}
+                    {FUNCOES_PADRAO.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">ENTRA</p>
-                  <p className="font-medium text-sm">
-                    {formatarMilitarStr(editPermuta.militarEntraData)}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    RG {formatarRG(editPermuta.militarEntraRg)}
-                  </p>
+                  <p className="font-medium text-sm">{formatarMilitarStr(editPermuta.militarEntraData)}</p>
+                  <p className="text-xs text-slate-500">RG {formatarRG(editPermuta.militarEntraRg)}</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">SAI</p>
-                  <p className="font-medium text-sm">
-                    {formatarMilitarStr(editPermuta.militarSaiData)}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    RG {formatarRG(editPermuta.militarSaiRg)}
-                  </p>
+                  <p className="font-medium text-sm">{formatarMilitarStr(editPermuta.militarSaiData)}</p>
+                  <p className="text-xs text-slate-500">RG {formatarRG(editPermuta.militarSaiRg)}</p>
                 </div>
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={salvarEdicao}
-              disabled={editSalvando}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              {editSalvando ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : null}
-              Salvar
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
+            <Button onClick={salvarEdicao} disabled={editSalvando} className="bg-red-600 hover:bg-red-700 text-white">
+              {editSalvando && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Salvar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Cadastrar Militar Modal ── */}
+      {/* Cadastrar / Editar Militar Modal */}
       <Dialog open={cadastroMilitarOpen} onOpenChange={setCadastroMilitarOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="h-5 w-5 text-red-600" />
-              Cadastrar Novo Militar
+              {editandoMilitarId ? 'Editar Militar' : 'Cadastrar Novo Militar'}
             </DialogTitle>
             <DialogDescription>
-              O RG informado não foi encontrado. Cadastre o militar abaixo.
+              {editandoMilitarId
+                ? 'Altere os dados do militar abaixo.'
+                : 'Este militar será salvo na base de permutas (separada da base de militares do GOCG).'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>RG</Label>
-                <Input
-                  value={novoMilitarRg}
-                  onChange={(e) => setNovoMilitarRg(e.target.value)}
-                  placeholder="Ex: 12345678"
-                />
+                <Input value={novoMilitarRg} onChange={(e) => setNovoMilitarRg(e.target.value)} placeholder="Ex: 53726" />
               </div>
               <div className="space-y-2">
                 <Label>Quadro</Label>
                 <Select value={novoMilitarQuadro} onValueChange={setNovoMilitarQuadro}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {['QPE', 'QOC', 'QOPM', 'QPC', 'QPM', 'QOE', 'QOBM'].map((q) => (
-                      <SelectItem key={q} value={q}>
-                        {q}
-                      </SelectItem>
-                    ))}
+                    {QUADROS.map((q) => <SelectItem key={q} value={q}>{q}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Nome completo</Label>
-              <Input
-                value={novoMilitarNome}
-                onChange={(e) => setNovoMilitarNome(e.target.value)}
-                placeholder="Ex: SILVA DE SOUZA"
-              />
+              <Label>Nome</Label>
+              <Input value={novoMilitarNome} onChange={(e) => setNovoMilitarNome(e.target.value)} placeholder="Ex: SILVA DE SOUZA" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Posto/Graduação</Label>
-                <Select value={novoMilitarPatente} onValueChange={setNovoMilitarPatente}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
+                <Label>Graduação</Label>
+                <Select value={novoMilitarGrad} onValueChange={setNovoMilitarGrad}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.values(Patente).map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
-                      </SelectItem>
-                    ))}
+                    {GRADUACOES.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Unidade (opcional)</Label>
-                <Input
-                  value={novoMilitarUnidade}
-                  onChange={(e) => setNovoMilitarUnidade(e.target.value)}
-                  placeholder="Ex: GOCG"
-                />
+                <Label>Unidade / Órgão</Label>
+                <Input value={novoMilitarUnidade} onChange={(e) => setNovoMilitarUnidade(e.target.value)} placeholder="Ex: GOCG" />
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCadastroMilitarOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={salvarNovoMilitar}
-              disabled={salvandoMilitar}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              {salvandoMilitar ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <UserPlus className="h-4 w-4 mr-2" />
-              )}
-              Cadastrar
+            <Button variant="outline" onClick={() => setCadastroMilitarOpen(false)}>Cancelar</Button>
+            <Button onClick={salvarMilitar} disabled={salvandoMilitar} className="bg-red-600 hover:bg-red-700 text-white">
+              {salvandoMilitar ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserPlus className="h-4 w-4 mr-2" />}
+              {editandoMilitarId ? 'Salvar' : 'Cadastrar'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Batch (Lote) Modal ── */}
+      {/* Batch (Lote) Modal */}
       <Dialog open={batchOpen} onOpenChange={setBatchOpen}>
         <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle className="text-xl">
-              Cadastrar Permutas em Lote
-            </DialogTitle>
+            <DialogTitle className="text-xl">Cadastrar Permutas em Lote</DialogTitle>
             <DialogDescription>
-              Preencha as linhas abaixo. Ao digitar o RG e sair do campo, o sistema buscará automaticamente os dados do militar.
+              Preencha as linhas abaixo. Ao digitar o RG e sair do campo, o sistema busca automaticamente na base de militares de permutas.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto space-y-4 py-2">
             {linhas.map((linha, idx) => (
-              <div
-                key={linha.id}
-                className="border rounded-lg p-4 bg-slate-50/50 space-y-3"
-              >
+              <div key={linha.id} className="border rounded-lg p-4 bg-slate-50/50 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-600">
-                    Permuta #{idx + 1}
-                  </span>
+                  <span className="text-sm font-semibold text-slate-600">Permuta #{idx + 1}</span>
                   {linhas.length > 1 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-slate-400 hover:text-red-500"
-                      onClick={() =>
-                        setLinhas((prev) => prev.filter((l) => l.id !== linha.id))
-                      }
-                    >
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => setLinhas((prev) => prev.filter((l) => l.id !== linha.id))}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Data */}
                   <div className="space-y-1">
                     <Label className="text-xs">Data do serviço</Label>
-                    <Input
-                      type="date"
-                      value={linha.data}
-                      onChange={(e) => updateLinha(linha.id, 'data', e.target.value)}
-                    />
+                    <Input type="date" value={linha.data} onChange={(e) => updateLinha(linha.id, 'data', e.target.value)} />
                   </div>
-
-                  {/* Função */}
                   <div className="space-y-1">
                     <Label className="text-xs">Função</Label>
-                    <Select
-                      value={linha.funcao}
-                      onValueChange={(v) => updateLinha(linha.id, 'funcao', v)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
+                    <Select value={linha.funcao} onValueChange={(v) => updateLinha(linha.id, 'funcao', v)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {FUNCOES_PADRAO.map((f) => (
-                          <SelectItem key={f} value={f}>
-                            {f}
-                          </SelectItem>
-                        ))}
+                        {FUNCOES_PADRAO.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1189,9 +1217,7 @@ export default function PermutasPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* ENTRA */}
                   <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-emerald-700">
-                      ENTRA (militar que assume)
-                    </Label>
+                    <Label className="text-xs font-semibold text-emerald-700">ENTRA (militar que assume)</Label>
                     <div className="flex gap-2">
                       <Input
                         placeholder="RG"
@@ -1200,42 +1226,19 @@ export default function PermutasPage() {
                         onBlur={() => buscarMilitarParaLinha(linha.id, 'entra', linha.rgEntra)}
                         className="w-32"
                       />
-                      {linha.loadingEntra && (
-                        <Loader2 className="h-4 w-4 animate-spin text-slate-400 self-center" />
-                      )}
+                      {linha.loadingEntra && <Loader2 className="h-4 w-4 animate-spin text-slate-400 self-center" />}
                     </div>
                     {linha.militarEntra && (
                       <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-xs">
-                        <span className="font-medium">
-                          {formatarMilitarStr(linha.militarEntra)}
-                        </span>
-                        <span className="text-slate-500 ml-2">
-                          RG {formatarRG(linha.militarEntra.rg)}
-                        </span>
+                        <span className="font-medium">{formatarMilitarStr(linha.militarEntra)}</span>
+                        <span className="text-slate-500 ml-2">RG {formatarRG(linha.militarEntra.rg)}</span>
                       </div>
                     )}
                     {linha.erroEntra && !linha.militarEntra && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-red-500">{linha.erroEntra}</span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-6 text-xs"
-                          onClick={() =>
-                            abrirCadastroMilitar(linha.rgEntra, (snap) => {
-                              setLinhas((prev) =>
-                                prev.map((l) =>
-                                  l.id === linha.id
-                                    ? { ...l, militarEntra: snap, erroEntra: '' }
-                                    : l
-                                )
-                              );
-                            })
-                          }
-                        >
-                          <UserPlus className="h-3 w-3 mr-1" />
-                          Cadastrar
+                        <Button type="button" variant="outline" size="sm" className="h-6 text-xs" onClick={() => abrirCadastroMilitar(linha.rgEntra, (snap) => { setLinhas((prev) => prev.map((l) => l.id === linha.id ? { ...l, militarEntra: snap, erroEntra: '' } : l)); })}>
+                          <UserPlus className="h-3 w-3 mr-1" /> Cadastrar
                         </Button>
                       </div>
                     )}
@@ -1243,9 +1246,7 @@ export default function PermutasPage() {
 
                   {/* SAI */}
                   <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-red-700">
-                      SAI (militar que deixa o serviço)
-                    </Label>
+                    <Label className="text-xs font-semibold text-red-700">SAI (militar que deixa o serviço)</Label>
                     <div className="flex gap-2">
                       <Input
                         placeholder="RG"
@@ -1254,42 +1255,19 @@ export default function PermutasPage() {
                         onBlur={() => buscarMilitarParaLinha(linha.id, 'sai', linha.rgSai)}
                         className="w-32"
                       />
-                      {linha.loadingSai && (
-                        <Loader2 className="h-4 w-4 animate-spin text-slate-400 self-center" />
-                      )}
+                      {linha.loadingSai && <Loader2 className="h-4 w-4 animate-spin text-slate-400 self-center" />}
                     </div>
                     {linha.militarSai && (
                       <div className="p-2 bg-red-50 border border-red-200 rounded text-xs">
-                        <span className="font-medium">
-                          {formatarMilitarStr(linha.militarSai)}
-                        </span>
-                        <span className="text-slate-500 ml-2">
-                          RG {formatarRG(linha.militarSai.rg)}
-                        </span>
+                        <span className="font-medium">{formatarMilitarStr(linha.militarSai)}</span>
+                        <span className="text-slate-500 ml-2">RG {formatarRG(linha.militarSai.rg)}</span>
                       </div>
                     )}
                     {linha.erroSai && !linha.militarSai && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-red-500">{linha.erroSai}</span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-6 text-xs"
-                          onClick={() =>
-                            abrirCadastroMilitar(linha.rgSai, (snap) => {
-                              setLinhas((prev) =>
-                                prev.map((l) =>
-                                  l.id === linha.id
-                                    ? { ...l, militarSai: snap, erroSai: '' }
-                                    : l
-                                )
-                              );
-                            })
-                          }
-                        >
-                          <UserPlus className="h-3 w-3 mr-1" />
-                          Cadastrar
+                        <Button type="button" variant="outline" size="sm" className="h-6 text-xs" onClick={() => abrirCadastroMilitar(linha.rgSai, (snap) => { setLinhas((prev) => prev.map((l) => l.id === linha.id ? { ...l, militarSai: snap, erroSai: '' } : l)); })}>
+                          <UserPlus className="h-3 w-3 mr-1" /> Cadastrar
                         </Button>
                       </div>
                     )}
@@ -1298,46 +1276,23 @@ export default function PermutasPage() {
               </div>
             ))}
 
-            {/* Add line button */}
-            <Button
-              variant="outline"
-              onClick={() => setLinhas((prev) => [...prev, criarLinhaVazia()])}
-              className="w-full border-dashed"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar linha
+            <Button variant="outline" onClick={() => setLinhas((prev) => [...prev, criarLinhaVazia()])} className="w-full border-dashed">
+              <Plus className="h-4 w-4 mr-2" /> Adicionar linha
             </Button>
           </div>
 
           <DialogFooter className="border-t pt-4 flex-shrink-0">
             <div className="flex items-center justify-between w-full">
               <span className="text-sm text-slate-500">
-                {linhas.filter((l) => l.data && l.funcao && l.militarEntra && l.militarSai).length}{' '}
-                de {linhas.length} linhas válidas
+                {linhas.filter((l) => l.data && l.funcao && l.militarEntra && l.militarSai).length} de {linhas.length} linhas válidas
               </span>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setBatchOpen(false)}
-                  disabled={salvandoLote}
-                >
-                  Cancelar
+                <Button variant="outline" onClick={() => setBatchOpen(false)} disabled={salvandoLote}>Cancelar</Button>
+                <Button variant="outline" onClick={() => salvarLote(false)} disabled={salvandoLote}>
+                  {salvandoLote && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Salvar
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => salvarLote(false)}
-                  disabled={salvandoLote}
-                >
-                  {salvandoLote ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Salvar
-                </Button>
-                <Button
-                  onClick={() => salvarLote(true)}
-                  disabled={salvandoLote}
-                  className="bg-red-600 hover:bg-red-700 text-white"
-                >
-                  {salvandoLote ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Salvar e fechar
+                <Button onClick={() => salvarLote(true)} disabled={salvandoLote} className="bg-red-600 hover:bg-red-700 text-white">
+                  {salvandoLote && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Salvar e fechar
                 </Button>
               </div>
             </div>
