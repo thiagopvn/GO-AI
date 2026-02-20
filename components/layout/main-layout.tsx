@@ -4,7 +4,7 @@ import { ReactNode, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from './sidebar';
-import { Loader2, LogOut, User, Settings } from 'lucide-react';
+import { Loader2, LogOut, User } from 'lucide-react';
 import { NotificationBell } from '@/components/ui/notification-bell';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,10 +22,10 @@ interface MainLayoutProps {
 }
 
 // Rotas públicas que não precisam de autenticação
-const publicRoutes = ['/login', '/register', '/forgot-password'];
+const publicRoutes = ['/login', '/register', '/forgot-password', '/aguardando-aprovacao', '/completar-perfil'];
 
 export function MainLayout({ children }: MainLayoutProps) {
-  const { user, userData, loading, logout } = useAuth();
+  const { user, userData, loading, logout, isApproved, isProfileComplete } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -43,10 +43,28 @@ export function MainLayout({ children }: MainLayoutProps) {
   };
 
   useEffect(() => {
-    if (!loading && !user && !publicRoutes.includes(pathname)) {
+    if (loading) return;
+
+    const isPublicRoute = publicRoutes.includes(pathname);
+
+    if (!user && !isPublicRoute) {
       router.push('/login');
+      return;
     }
-  }, [user, loading, router, pathname]);
+
+    if (user && !isPublicRoute) {
+      // Perfil incompleto (usuários Google)
+      if (!isProfileComplete) {
+        router.push('/completar-perfil');
+        return;
+      }
+      // Não aprovado
+      if (!isApproved) {
+        router.push('/aguardando-aprovacao');
+        return;
+      }
+    }
+  }, [user, loading, router, pathname, isApproved, isProfileComplete]);
 
   // Mostrar loading enquanto verifica autenticação
   if (loading) {
@@ -65,7 +83,12 @@ export function MainLayout({ children }: MainLayoutProps) {
     return <>{children}</>;
   }
 
-  // Layout principal para usuários autenticados
+  // Se não aprovado ou perfil incompleto, não renderizar o layout principal
+  if (!isApproved || !isProfileComplete) {
+    return <>{children}</>;
+  }
+
+  // Layout principal para usuários autenticados e aprovados
   return (
     <div className="flex h-screen bg-slate-50">
       <Sidebar />
@@ -85,9 +108,9 @@ export function MainLayout({ children }: MainLayoutProps) {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || ''} />
+                      <AvatarImage src={userData?.fotoURL || user?.photoURL || ''} alt={userData?.nome || ''} />
                       <AvatarFallback>
-                        {user?.displayName?.charAt(0).toUpperCase() || 'U'}
+                        {userData?.nome?.charAt(0)?.toUpperCase() || user?.displayName?.charAt(0)?.toUpperCase() || 'U'}
                       </AvatarFallback>
                     </Avatar>
                   </Button>

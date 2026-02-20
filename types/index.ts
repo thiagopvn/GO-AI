@@ -238,6 +238,16 @@ export interface Usuario {
   telefone?: string;
   ativo: boolean;
   perfil?: 'admin' | 'usuario' | 'consulta';
+  // Sistema de aprovação
+  aprovado: boolean;
+  aprovadoPor?: string;
+  aprovadoPorNome?: string;
+  dataAprovacao?: Date;
+  motivoRejeicao?: string;
+  // Google auth
+  fotoURL?: string;
+  provedor: 'email' | 'google';
+  perfilCompleto: boolean;
   createdAt?: Date;
   updatedAt?: Date;
   lastLogin?: Date;

@@ -18,6 +18,7 @@ import {
   ArrowLeftRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState } from 'react';
 
@@ -77,6 +78,10 @@ export function Sidebar() {
     }
   };
 
+  const getInitials = (nome: string) => {
+    return nome.split(' ').map((n: string) => n[0]).join('').slice(0, 2);
+  };
+
   return (
     <aside
       className={cn(
@@ -112,18 +117,27 @@ export function Sidebar() {
       {/* User Info */}
       {userData && (
         <div className="p-4 border-b border-slate-800">
-          {!isCollapsed ? (
-            <div>
-              <p className="font-medium truncate">{userData.nome}</p>
-              <p className="text-sm text-slate-400">{userData.patente}</p>
-              <p className="text-xs text-slate-500 truncate">{userData.unidade}</p>
+          {isCollapsed ? (
+            <div className="flex justify-center">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={userData.fotoURL || ''} />
+                <AvatarFallback className="bg-slate-700 text-white text-sm">
+                  {getInitials(userData.nome)}
+                </AvatarFallback>
+              </Avatar>
             </div>
           ) : (
-            <div className="flex justify-center">
-              <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center">
-                <span className="text-sm font-medium">
-                  {userData.nome.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                </span>
+            <div className="flex items-center gap-3">
+              <Avatar className="h-10 w-10 flex-shrink-0">
+                <AvatarImage src={userData.fotoURL || ''} />
+                <AvatarFallback className="bg-slate-700 text-white text-sm">
+                  {getInitials(userData.nome)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="font-medium truncate">{userData.nome}</p>
+                <p className="text-sm text-slate-400">{userData.patente}</p>
+                <p className="text-xs text-slate-500 truncate">{userData.unidade}</p>
               </div>
             </div>
           )}

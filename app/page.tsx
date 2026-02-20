@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { StatsCard } from '@/components/dashboard/stats-card';
+import { UserWelcome } from '@/components/dashboard/user-welcome';
+import { PendingApprovals } from '@/components/dashboard/pending-approvals';
 import { useRealtimeStats } from '@/hooks/useRealtimeStats';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -546,11 +548,17 @@ export default function Home() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
+      {/* Welcome Card Personalizado */}
+      <UserWelcome />
+
+      {/* Solicitações Pendentes (apenas para admins) */}
+      <PendingApprovals />
+
+      {/* Seção de Estatísticas */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">
-          Visão geral do sistema de gestão disciplinar
+        <h2 className="text-2xl font-bold text-gray-900">Visão Geral</h2>
+        <p className="text-gray-600 mt-1">
+          Estatísticas do sistema de gestão disciplinar
         </p>
       </div>
 
