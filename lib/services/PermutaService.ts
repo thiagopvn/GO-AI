@@ -7,6 +7,7 @@ import {
   query,
   orderBy,
   writeBatch,
+  deleteField,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { PermutaDoc, PermutaInput, PermutaFiltros } from '@/types/permutas';
@@ -170,7 +171,7 @@ export class PermutaService {
       const docRef = doc(db, COLLECTION, id);
       batch.update(docRef, {
         arquivada: false,
-        dataArquivamento: undefined,
+        dataArquivamento: deleteField(),
         atualizadoEm: agora,
       });
     }
