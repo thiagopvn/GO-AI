@@ -31,7 +31,8 @@ import {
   History,
   StickyNote,
   Save,
-  Check
+  Check,
+  Download
 } from 'lucide-react';
 import {
   collection,
@@ -50,6 +51,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ComportamentoService } from '@/lib/services/ComportamentoService';
+import { DocumentService } from '@/lib/services/DocumentService';
 import { useAuth } from '@/contexts/AuthContext';
 import { LancarPunicaoAntigaModal, PunicaoAntigaData } from '@/components/modals/LancarPunicaoAntigaModal';
 import { Timestamp } from 'firebase/firestore';
@@ -137,6 +139,8 @@ export default function MilitaresPage() {
   const [isLancarPunicaoModalOpen, setIsLancarPunicaoModalOpen] = useState(false);
   const [militarParaPunicao, setMilitarParaPunicao] = useState<Militar | null>(null);
   const [isLancandoPunicao, setIsLancandoPunicao] = useState(false);
+
+  const [isDownloadingComportamento, setIsDownloadingComportamento] = useState(false);
 
   // Estados para observações com melhor UX
   const [observacoesTemp, setObservacoesTemp] = useState('');
@@ -459,6 +463,28 @@ export default function MilitaresPage() {
     }
   };
 
+  // Baixar relatório de comportamento em Word
+  const handleDownloadComportamento = async () => {
+    try {
+      setIsDownloadingComportamento(true);
+      const blob = await DocumentService.gerarRelatorioComportamento(militares);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Relatorio_Comportamento_Pracas_${format(new Date(), 'dd-MM-yyyy')}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('Relatório de comportamento baixado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao gerar relatório:', error);
+      toast.error('Erro ao gerar relatório de comportamento');
+    } finally {
+      setIsDownloadingComportamento(false);
+    }
+  };
+
   // Lançar punição antiga do sistema DGP
   const handleLancarPunicaoAntiga = async (data: PunicaoAntigaData) => {
     try {
@@ -671,13 +697,27 @@ export default function MilitaresPage() {
             Gerenciamento de militares e suas fichas disciplinares
           </p>
         </div>
-        <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-red-600 hover:bg-red-700">
-              <Plus className="mr-2 h-4 w-4" />
-              Adicionar Militar
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleDownloadComportamento}
+            disabled={isDownloadingComportamento || loading}
+            className="border-green-300 text-green-700 hover:bg-green-50"
+          >
+            {isDownloadingComportamento ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Baixar Comportamento
+          </Button>
+          <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-red-600 hover:bg-red-700">
+                <Plus className="mr-2 h-4 w-4" />
+                Adicionar Militar
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>Adicionar Novo Militar</DialogTitle>
@@ -776,6 +816,7 @@ export default function MilitaresPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Search e Filtros */}

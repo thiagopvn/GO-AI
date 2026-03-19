@@ -10,8 +10,12 @@ import {
   Packer,
   ShadingType,
   HeadingLevel,
-  ImageRun
+  ImageRun,
+  BorderStyle,
+  VerticalAlign,
+  PageOrientation
 } from 'docx';
+import { Militar, isPraca } from '@/types';
 import { ConclusaoPadData } from '@/components/modals/ConcluirPadModal';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -563,6 +567,314 @@ export class DocumentService {
     }
 
     return paragraphs;
+  }
+
+  /**
+   * Gera relatório de comportamento de todos os praças em formato Word
+   * Tabela estilizada com Nome de Guerra (negrito), RG e Comportamento
+   */
+  static async gerarRelatorioComportamento(militares: Militar[]): Promise<Blob> {
+    // Filtrar apenas praças e ordenar por patente/nome
+    const ordemPatentes = [
+      'Subtenente', '1º Sargento', '2º Sargento', '3º Sargento', 'Cabo', 'Soldado'
+    ];
+
+    const pracas = militares
+      .filter(m => isPraca(m.patente))
+      .sort((a, b) => {
+        const idxA = ordemPatentes.indexOf(a.patente);
+        const idxB = ordemPatentes.indexOf(b.patente);
+        if (idxA !== idxB) return idxA - idxB;
+        return a.nome.localeCompare(b.nome);
+      });
+
+    const borderStyle = {
+      style: BorderStyle.SINGLE,
+      size: 1,
+      color: '999999',
+    };
+
+    const cellBorders = {
+      top: borderStyle,
+      bottom: borderStyle,
+      left: borderStyle,
+      right: borderStyle,
+    };
+
+    // Cores de comportamento para o fundo da célula
+    const coresComportamento: Record<string, { fill: string; text: string }> = {
+      'EXCEPCIONAL': { fill: '10B981', text: 'FFFFFF' },
+      'ÓTIMO': { fill: '3B82F6', text: 'FFFFFF' },
+      'BOM': { fill: '22C55E', text: 'FFFFFF' },
+      'INSUFICIENTE': { fill: 'EAB308', text: 'FFFFFF' },
+      'MAU': { fill: 'EF4444', text: 'FFFFFF' },
+    };
+
+    // Cabeçalho da tabela
+    const headerRow = new TableRow({
+      tableHeader: true,
+      children: [
+        new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({ text: 'Nº', bold: true, size: 20, color: 'FFFFFF', font: 'Arial' })],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 60, after: 60 },
+          })],
+          width: { size: 6, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.SOLID, fill: '1F2937' },
+          borders: cellBorders,
+          verticalAlign: VerticalAlign.CENTER,
+        }),
+        new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({ text: 'POSTO/GRAD', bold: true, size: 20, color: 'FFFFFF', font: 'Arial' })],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 60, after: 60 },
+          })],
+          width: { size: 16, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.SOLID, fill: '1F2937' },
+          borders: cellBorders,
+          verticalAlign: VerticalAlign.CENTER,
+        }),
+        new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({ text: 'NOME DE GUERRA', bold: true, size: 20, color: 'FFFFFF', font: 'Arial' })],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 60, after: 60 },
+          })],
+          width: { size: 38, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.SOLID, fill: '1F2937' },
+          borders: cellBorders,
+          verticalAlign: VerticalAlign.CENTER,
+        }),
+        new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({ text: 'RG', bold: true, size: 20, color: 'FFFFFF', font: 'Arial' })],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 60, after: 60 },
+          })],
+          width: { size: 16, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.SOLID, fill: '1F2937' },
+          borders: cellBorders,
+          verticalAlign: VerticalAlign.CENTER,
+        }),
+        new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({ text: 'COMPORTAMENTO', bold: true, size: 20, color: 'FFFFFF', font: 'Arial' })],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 60, after: 60 },
+          })],
+          width: { size: 24, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.SOLID, fill: '1F2937' },
+          borders: cellBorders,
+          verticalAlign: VerticalAlign.CENTER,
+        }),
+      ],
+    });
+
+    // Linhas dos dados
+    const dataRows = pracas.map((militar, index) => {
+      const comportamento = militar.comportamento || 'BOM';
+      const cores = coresComportamento[comportamento] || { fill: 'D1D5DB', text: '000000' };
+      const rowFill = index % 2 === 0 ? 'FFFFFF' : 'F3F4F6';
+
+      return new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: String(index + 1), size: 20, font: 'Arial' })],
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 40, after: 40 },
+            })],
+            shading: { type: ShadingType.SOLID, fill: rowFill },
+            borders: cellBorders,
+            verticalAlign: VerticalAlign.CENTER,
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: militar.patente, size: 20, font: 'Arial' })],
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 40, after: 40 },
+            })],
+            shading: { type: ShadingType.SOLID, fill: rowFill },
+            borders: cellBorders,
+            verticalAlign: VerticalAlign.CENTER,
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({
+                text: militar.nomeDeGuerra || militar.nome,
+                bold: true,
+                size: 22,
+                font: 'Arial',
+              })],
+              spacing: { before: 40, after: 40 },
+            })],
+            shading: { type: ShadingType.SOLID, fill: rowFill },
+            borders: cellBorders,
+            verticalAlign: VerticalAlign.CENTER,
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: militar.rg || militar.matricula || '-', size: 20, font: 'Arial' })],
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 40, after: 40 },
+            })],
+            shading: { type: ShadingType.SOLID, fill: rowFill },
+            borders: cellBorders,
+            verticalAlign: VerticalAlign.CENTER,
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({
+                text: comportamento,
+                bold: true,
+                size: 20,
+                color: cores.text,
+                font: 'Arial',
+              })],
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 40, after: 40 },
+            })],
+            shading: { type: ShadingType.SOLID, fill: cores.fill },
+            borders: cellBorders,
+            verticalAlign: VerticalAlign.CENTER,
+          }),
+        ],
+      });
+    });
+
+    const dataAtual = new Date().toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    });
+
+    const doc = new Document({
+      sections: [{
+        properties: {
+          page: {
+            margin: { top: 567, right: 567, bottom: 567, left: 567 },
+            size: { orientation: PageOrientation.LANDSCAPE },
+          },
+        },
+        children: [
+          // Cabeçalho institucional
+          new Paragraph({
+            children: [new TextRun({
+              text: 'CORPO DE BOMBEIROS MILITAR DO ESTADO DO RIO DE JANEIRO',
+              bold: true, size: 24, font: 'Arial',
+            })],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 50 },
+          }),
+          new Paragraph({
+            children: [new TextRun({
+              text: 'GRUPAMENTO OPERACIONAL DO COMANDO GERAL',
+              bold: true, size: 22, font: 'Arial',
+            })],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
+          }),
+
+          // Título
+          new Paragraph({
+            children: [new TextRun({
+              text: 'RELATÓRIO DE COMPORTAMENTO DOS PRAÇAS',
+              bold: true, size: 28, font: 'Arial', color: '1F2937',
+            })],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 50 },
+          }),
+          new Paragraph({
+            children: [new TextRun({
+              text: `Data de emissão: ${dataAtual}`,
+              size: 20, font: 'Arial', color: '6B7280', italics: true,
+            })],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
+          }),
+
+          // Linha separadora
+          new Paragraph({
+            children: [new TextRun({
+              text: '_'.repeat(120),
+              size: 16, color: 'D1D5DB',
+            })],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
+          }),
+
+          // Tabela
+          new Table({
+            rows: [headerRow, ...dataRows],
+            width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
+
+          // Rodapé com totais
+          new Paragraph({
+            children: [new TextRun({
+              text: '_'.repeat(120),
+              size: 16, color: 'D1D5DB',
+            })],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 200, after: 100 },
+          }),
+          new Paragraph({
+            children: [new TextRun({
+              text: `Total de praças: ${pracas.length}`,
+              bold: true, size: 20, font: 'Arial',
+            })],
+            spacing: { after: 50 },
+          }),
+          ...Object.entries(
+            pracas.reduce((acc, m) => {
+              const c = m.comportamento || 'BOM';
+              acc[c] = (acc[c] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>)
+          ).map(([comportamento, qtd]) =>
+            new Paragraph({
+              children: [new TextRun({
+                text: `  ${comportamento}: ${qtd} militar${qtd > 1 ? 'es' : ''}`,
+                size: 20, font: 'Arial', color: '374151',
+              })],
+              spacing: { after: 30 },
+            })
+          ),
+
+          // Assinatura
+          new Paragraph({
+            children: [new TextRun({
+              text: '________________________________',
+              size: 22, font: 'Arial',
+            })],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 400, after: 50 },
+          }),
+          new Paragraph({
+            children: [new TextRun({
+              text: 'AIOP - GOCG/CBMERJ',
+              bold: true, size: 20, font: 'Arial',
+            })],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 50 },
+          }),
+          new Paragraph({
+            children: [new TextRun({
+              text: 'Documento gerado automaticamente pelo sistema',
+              size: 18, font: 'Arial', color: '9CA3AF', italics: true,
+            })],
+            alignment: AlignmentType.CENTER,
+          }),
+        ],
+      }],
+    });
+
+    const buffer = await Packer.toBuffer(doc);
+    return new Blob([new Uint8Array(buffer)], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
   }
 
   // Método auxiliar para converter o Blob em base64 para upload no Firebase
