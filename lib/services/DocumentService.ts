@@ -601,15 +601,6 @@ export class DocumentService {
       right: borderStyle,
     };
 
-    // Cores de comportamento para o fundo da célula
-    const coresComportamento: Record<string, { fill: string; text: string }> = {
-      'EXCEPCIONAL': { fill: '10B981', text: 'FFFFFF' },
-      'ÓTIMO': { fill: '3B82F6', text: 'FFFFFF' },
-      'BOM': { fill: '22C55E', text: 'FFFFFF' },
-      'INSUFICIENTE': { fill: 'EAB308', text: 'FFFFFF' },
-      'MAU': { fill: 'EF4444', text: 'FFFFFF' },
-    };
-
     // Cabeçalho da tabela
     const headerRow = new TableRow({
       tableHeader: true,
@@ -675,7 +666,6 @@ export class DocumentService {
     // Linhas dos dados
     const dataRows = pracas.map((militar, index) => {
       const comportamento = militar.comportamento || 'BOM';
-      const cores = coresComportamento[comportamento] || { fill: 'D1D5DB', text: '000000' };
       const rowFill = index % 2 === 0 ? 'FFFFFF' : 'F3F4F6';
 
       return new TableRow({
@@ -705,7 +695,7 @@ export class DocumentService {
               children: [new TextRun({
                 text: militar.nomeDeGuerra || militar.nome,
                 bold: true,
-                size: 22,
+                size: 20,
                 font: 'Arial',
               })],
               spacing: { before: 40, after: 40 },
@@ -728,15 +718,13 @@ export class DocumentService {
             children: [new Paragraph({
               children: [new TextRun({
                 text: comportamento,
-                bold: true,
                 size: 20,
-                color: cores.text,
                 font: 'Arial',
               })],
               alignment: AlignmentType.CENTER,
               spacing: { before: 40, after: 40 },
             })],
-            shading: { type: ShadingType.SOLID, fill: cores.fill },
+            shading: { type: ShadingType.SOLID, fill: rowFill },
             borders: cellBorders,
             verticalAlign: VerticalAlign.CENTER,
           }),
