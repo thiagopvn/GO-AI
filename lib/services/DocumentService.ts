@@ -607,56 +607,56 @@ export class DocumentService {
       children: [
         new TableCell({
           children: [new Paragraph({
-            children: [new TextRun({ text: 'Nº', bold: true, size: 20, color: 'FFFFFF', font: 'Arial' })],
+            children: [new TextRun({ text: 'Nº', bold: true, size: 20, color: '000000', font: 'Arial' })],
             alignment: AlignmentType.CENTER,
             spacing: { before: 60, after: 60 },
           })],
           width: { size: 6, type: WidthType.PERCENTAGE },
-          shading: { type: ShadingType.SOLID, fill: '1F2937' },
+          shading: { type: ShadingType.SOLID, fill: 'D1D5DB' },
           borders: cellBorders,
           verticalAlign: VerticalAlign.CENTER,
         }),
         new TableCell({
           children: [new Paragraph({
-            children: [new TextRun({ text: 'POSTO/GRAD', bold: true, size: 20, color: 'FFFFFF', font: 'Arial' })],
+            children: [new TextRun({ text: 'POSTO/GRAD', bold: true, size: 20, color: '000000', font: 'Arial' })],
             alignment: AlignmentType.CENTER,
             spacing: { before: 60, after: 60 },
           })],
           width: { size: 16, type: WidthType.PERCENTAGE },
-          shading: { type: ShadingType.SOLID, fill: '1F2937' },
+          shading: { type: ShadingType.SOLID, fill: 'D1D5DB' },
           borders: cellBorders,
           verticalAlign: VerticalAlign.CENTER,
         }),
         new TableCell({
           children: [new Paragraph({
-            children: [new TextRun({ text: 'NOME DE GUERRA', bold: true, size: 20, color: 'FFFFFF', font: 'Arial' })],
+            children: [new TextRun({ text: 'NOME COMPLETO', bold: true, size: 20, color: '000000', font: 'Arial' })],
             alignment: AlignmentType.CENTER,
             spacing: { before: 60, after: 60 },
           })],
           width: { size: 38, type: WidthType.PERCENTAGE },
-          shading: { type: ShadingType.SOLID, fill: '1F2937' },
+          shading: { type: ShadingType.SOLID, fill: 'D1D5DB' },
           borders: cellBorders,
           verticalAlign: VerticalAlign.CENTER,
         }),
         new TableCell({
           children: [new Paragraph({
-            children: [new TextRun({ text: 'RG', bold: true, size: 20, color: 'FFFFFF', font: 'Arial' })],
+            children: [new TextRun({ text: 'RG', bold: true, size: 20, color: '000000', font: 'Arial' })],
             alignment: AlignmentType.CENTER,
             spacing: { before: 60, after: 60 },
           })],
           width: { size: 16, type: WidthType.PERCENTAGE },
-          shading: { type: ShadingType.SOLID, fill: '1F2937' },
+          shading: { type: ShadingType.SOLID, fill: 'D1D5DB' },
           borders: cellBorders,
           verticalAlign: VerticalAlign.CENTER,
         }),
         new TableCell({
           children: [new Paragraph({
-            children: [new TextRun({ text: 'COMPORTAMENTO', bold: true, size: 20, color: 'FFFFFF', font: 'Arial' })],
+            children: [new TextRun({ text: 'COMPORTAMENTO', bold: true, size: 20, color: '000000', font: 'Arial' })],
             alignment: AlignmentType.CENTER,
             spacing: { before: 60, after: 60 },
           })],
           width: { size: 24, type: WidthType.PERCENTAGE },
-          shading: { type: ShadingType.SOLID, fill: '1F2937' },
+          shading: { type: ShadingType.SOLID, fill: 'D1D5DB' },
           borders: cellBorders,
           verticalAlign: VerticalAlign.CENTER,
         }),
@@ -692,12 +692,31 @@ export class DocumentService {
           }),
           new TableCell({
             children: [new Paragraph({
-              children: [new TextRun({
-                text: militar.nomeDeGuerra || militar.nome,
-                bold: true,
-                size: 20,
-                font: 'Arial',
-              })],
+              children: (() => {
+                const nomeCompleto = militar.nome || '';
+                const nomeGuerra = militar.nomeDeGuerra || '';
+                // Se tem nome de guerra, destacar ele em negrito dentro do nome completo
+                if (nomeGuerra && nomeCompleto.toUpperCase().includes(nomeGuerra.toUpperCase())) {
+                  const idx = nomeCompleto.toUpperCase().indexOf(nomeGuerra.toUpperCase());
+                  const antes = nomeCompleto.substring(0, idx);
+                  const destaque = nomeCompleto.substring(idx, idx + nomeGuerra.length);
+                  const depois = nomeCompleto.substring(idx + nomeGuerra.length);
+                  const runs: TextRun[] = [];
+                  if (antes) runs.push(new TextRun({ text: antes, size: 20, font: 'Arial' }));
+                  runs.push(new TextRun({ text: destaque, bold: true, size: 20, font: 'Arial' }));
+                  if (depois) runs.push(new TextRun({ text: depois, size: 20, font: 'Arial' }));
+                  return runs;
+                }
+                // Se nome de guerra não está contido no nome completo, mostrar "NOME (GUERRA)"
+                if (nomeGuerra) {
+                  return [
+                    new TextRun({ text: nomeCompleto + ' (', size: 20, font: 'Arial' }),
+                    new TextRun({ text: nomeGuerra, bold: true, size: 20, font: 'Arial' }),
+                    new TextRun({ text: ')', size: 20, font: 'Arial' }),
+                  ];
+                }
+                return [new TextRun({ text: nomeCompleto, size: 20, font: 'Arial' })];
+              })(),
               spacing: { before: 40, after: 40 },
             })],
             shading: { type: ShadingType.SOLID, fill: rowFill },
